@@ -3,6 +3,8 @@
 use App\Http\Controllers\AdminController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\HomeController;
+use App\Http\Controllers\Admin\BSEController;
+use App\Http\Controllers\Admin\NSEController;
 
 use Illuminate\Support\Facades\Route;
 
@@ -17,6 +19,10 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
+// Route::get('/pass', function () {
+//     echo Illuminate\Support\Facades\Hash::make('admin123');
+// });
+
 // Authenticated routes
 Route::group(['middleware' => 'auth'], function () {
     // Admin prefix routes
@@ -27,6 +33,19 @@ Route::group(['middleware' => 'auth'], function () {
         Route::get('/loadChangePass', [AdminController::class, 'changePass'])->name('admin.loadChangePass');
         Route::post('/changePassword', [AdminController::class, 'updatePass'])->name('admin.changePassword');
 
+        // NSE
+        Route::get('/files/nse', [NSEController::class, 'index'])->name('nse.index');
+        Route::get('/files/nse/{segment}', [NSEController::class, 'getSegment'])->name('nse.segment');
+        Route::get('/files/nse/{segment}/{folder}/today', [NSEController::class, 'getTodaySegmentFolder'])->name('nse.segment.folder.today');
+        Route::get('/files/nse/{segment}/{folder}/archives', [NSEController::class, 'getArchiveSegmentFolder'])->name('nse.segment.archives');
+        Route::get('/files/nse/{id}/download', [NSEController::class, 'downloadFile'])->name('nse.segment.downloadFile');
+        Route::get('/nse/download/prepare/{id}', [NseController::class, 'prepareDownload'])->name('nse.file.prepare');
+        Route::get('/nse/download/serve/{id}', [NseController::class, 'serveFile'])->name('nse.file.serve');
+
+        // BSE
+        // Route::get('/files/bse', [BSEController::class, 'index'])->name('bse.index');
+        // Route::get('/files/bse/{segment}', [BSEController::class, 'index'])->name('nse.segment');
+        // Route::get('/files/nse/{segment}/{folder}', [BSEController::class, 'getSegmentFolder'])->name('nse.segment.folder');
       
     });
 });

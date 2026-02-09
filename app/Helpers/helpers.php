@@ -15,3 +15,16 @@ if (!function_exists('getDateFormatted')) {
     }
 }
 
+if (!function_exists('encryptPassword')) {
+    /**
+     * Encrypt the password using AES-256-ECB encryption method and base64 encoding.
+     *
+     */
+    function encryptPassword($plainText, $base64Key)
+    {
+        $key = base64_decode($base64Key);
+        $encrypted = openssl_encrypt($plainText, 'aes-256-ecb', $key, OPENSSL_RAW_DATA);
+        return base64_encode($encrypted);
+    }
+}
+

@@ -23,4 +23,17 @@ return [
      * Pagination links on each side of current page
      */
     'pagination_links_each_side' => env('PAGINATION_LINKS_EACH_SIDE', 1),
+
+    /**
+     * NSE API Configuration
+     */
+    'nse' => [
+        'member_code' => env('NSE_MEMBER_CODE'),
+        'base_url' => env('NSE_BASE_URL'),
+        'version' => env('NSE_VERSION',),
+        'login_id' => env('NSE_LOGIN_ID'),
+        'password' => env('NSE_PASSWORD'),
+        'secret' => env('NSE_SECRET'),
+        'test_mode' => env('NSE_TEST_MODE', false),
+    ],
 ];

@@ -163,7 +163,48 @@
     <div class="container-fluid">
       <div class="row">
         <div class="col">
-            
+          <div class="explorer-container">
+            <div class="explorer-toolbar">
+              <span class="view-title">Market Exchanges</span>
+              <div class="view-controls">
+                <button onclick="changeView('view-grid-big')" title="Big Icons">▦</button>
+                <button onclick="changeView('view-grid-small')" title="Small Icons">☷</button>
+                <button onclick="changeView('view-list')" title="List View">☰</button>
+              </div>
+            </div>
+
+            <div id="folderCanvas" class="view-grid-big">
+
+              
+              <a href="{{ route('nse.index') }}"s>
+                <div class="folder-item">
+                  <div class="folder-icon">
+                    <svg viewBox="0 0 24 24">
+                      <path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z" />
+                    </svg>
+                  </div>
+                    <div class="folder-info">
+                      <span class="folder-name">NSE</a>
+                      <span class="folder-meta">24 Files</span>
+                    </div>
+                </div>
+              </a>
+
+              
+              <a href="#" class="folder-name">
+                <div class="folder-item">
+                  <div class="folder-icon">
+                    <svg viewBox="0 0 24 24">
+                      <path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z" />
+                    </svg>
+                  </div>
+                    <div class="folder-info">BSE</span>
+                      <span class="folder-meta">18 Files</span>
+                    </div>
+                </div>
+              </a>
+            </div>
+          </div>
         </div>
       </div>
       <!-- /.row -->
@@ -177,4 +218,22 @@
 
 @section('script')
 
+<script>
+  function changeView(viewClass) {
+    const canvas = document.getElementById('folderCanvas');
+    if (canvas) {
+      canvas.classList.remove('view-grid-big', 'view-grid-small', 'view-list');
+      canvas.classList.add(viewClass);
+
+      // Optional: Save preference to localStorage so it stays after refresh
+      localStorage.setItem('folder-view-pref', viewClass);
+    }
+  }
+
+  // Optional: Load the saved preference on page load
+  document.addEventListener('DOMContentLoaded', () => {
+    const savedView = localStorage.getItem('folder-view-pref');
+    if (savedView) changeView(savedView);
+  });
+</script>
 @endsection
