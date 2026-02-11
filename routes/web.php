@@ -38,9 +38,11 @@ Route::group(['middleware' => 'auth'], function () {
         Route::get('/files/nse/{segment}', [NSEController::class, 'getSegment'])->name('nse.segment');
         Route::get('/files/nse/{segment}/{folder}/today', [NSEController::class, 'getTodaySegmentFolder'])->name('nse.segment.folder.today');
         Route::get('/files/nse/{segment}/{folder}/archives', [NSEController::class, 'getArchiveSegmentFolder'])->name('nse.segment.archives');
-        Route::get('/files/nse/{id}/download', [NSEController::class, 'downloadFile'])->name('nse.segment.downloadFile');
+        // Route::get('/files/nse/{id}/download', [NSEController::class, 'downloadFile'])->name('nse.segment.downloadFile');
         Route::get('/nse/download/prepare/{id}', [NseController::class, 'prepareDownload'])->name('nse.file.prepare');
         Route::get('/nse/download/serve/{id}', [NseController::class, 'serveFile'])->name('nse.file.serve');
+        Route::post('/nse/sync/clear/{segment}/{folder}', [NseController::class, 'clearFolderCache'])->name('nse.sync.clear');
+        Route::post('/nse/archive/sync/clear/{segment}/{folder}', [NseController::class, 'clearArchiveFolderCache'])->name('nse.archive.sync.clear');
 
         // BSE
         // Route::get('/files/bse', [BSEController::class, 'index'])->name('bse.index');

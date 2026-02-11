@@ -234,10 +234,20 @@
         <div class="page-header-row">
             <h1 class="page-title">NSE Member Segment</h1>
             <div class="header-right">
-                <button class="btn-sync">
+                <button class="btn-sync" onclick="syncNow('{{ $segment }}', '{{ $folder }}')">
                     <i class="fas fa-sync-alt"></i> SYNC NOW
                 </button>
             </div>
+        </div>
+
+        <div class="custom-breadcrumb mb-2">
+            <span>NSE</span>
+            <span class="breadcrumb-separator">/</span>
+            <span>Member Segment</span>
+            <span class="breadcrumb-separator">/</span>
+            <span>{{ str()->upper($segment) }}</span>
+            <span class="breadcrumb-separator">/</span>
+            <span class="active-item">{{ str()->studly($folder) }} Archives</span>
         </div>
 
         <div class="white-card">
@@ -249,8 +259,6 @@
             <div class="archive-list-container">
                 
                 @php
-                    // Group contents by Date (YYYY-MM-DD)
-                    // Assuming $contents is a Collection or Paginator
                     $groupedContents = $contents->groupBy(function($item) {
                         return $item->nse_modified_at->format('Y-m-d');
                     });
@@ -389,6 +397,40 @@
                     btn.innerText = originalText;
                 }, 3000);
             });
+    }
+
+    function syncNow(segment, folder) {
+        const btn = document.querySelector('.btn-sync');
+        const originalHtml = btn.innerHTML;
+        
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> REFRESHING...';
+
+        const url = "{{ route('nse.archive.sync.clear', ['segment' => ':segment', 'folder' => ':folder']) }}".replace(':segment', segment).replace(':folder', folder);
+
+        fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                window.location.reload();
+            } else {
+                alert('Failed to clear cache.');
+                btn.disabled = false;
+                btn.innerHTML = originalHtml;
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Something went wrong.');
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
+        });
     }
 </script>
 @endsection

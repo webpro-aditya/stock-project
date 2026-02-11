@@ -87,7 +87,7 @@ class NSEController extends Controller
                             'segment'         => Str::upper($segment),
                             'parent_folder'   => $folder,
                             'name'            => $item['name'],
-                            'type'            => ($item['isFolder'] ?? false) ? 'folder' : 'file',
+                            'type'            => $item['type'],
                             'path'            => Str::upper($segment) . '/' . $folder . '/' . $item['name'],
                             'size'            => $item['size'] ?? 0,
                             'nse_modified_at' => $fileDate,
@@ -122,6 +122,15 @@ class NSEController extends Controller
             'contents'  => $contents,
             'authToken' => $authToken
         ]);
+    }
+
+    public function clearFolderCache($segment, $folder)
+    {
+        $cacheKey = "nse_sync_" . Str::slug($segment . '_' . $folder . '_today');
+
+        Cache::forget($cacheKey);
+
+        return response()->json(['success' => true]);
     }
 
     public function getArchiveSegmentFolder($segment, $folder)
@@ -170,7 +179,7 @@ class NSEController extends Controller
                         'segment'         => Str::upper($segment),
                         'parent_folder'   => $folder,
                         'name'            => $item['name'],
-                        'type'            => ($item['isFolder'] ?? false) ? 'folder' : 'file',
+                        'type'            => $item['type'],
                         'path'            => Str::upper($segment) . '/' . $folder . '/' . $item['name'],
                         'size'            => $item['size'] ?? 0,
                         'nse_modified_at' => $dateString ? \Carbon\Carbon::parse($dateString) : null,
@@ -205,74 +214,83 @@ class NSEController extends Controller
         ]);
     }
 
-    public function downloadFile($id)
+    public function clearArchiveFolderCache($segment, $folder)
     {
-        $sessionData = Session::get('nse_auth_token');
-        $now = now()->timestamp;
+        $cacheKey = "nse_sync_" . Str::slug($segment . '_' . $folder);
 
-        $needsNewToken = !$sessionData ||
-            !is_array($sessionData) ||
-            ($sessionData['expires_at'] ?? 0) < $now ||
-            empty($sessionData['value']);
+        Cache::forget($cacheKey);
 
-        if ($needsNewToken) {
-            $authToken = $this->nseService->getAuthToken();
-            if ($authToken) {
-                Session::put('nse_auth_token', [
-                    'value' => $authToken,
-                    'expires_at' => now()->addMinutes(60)->timestamp
-                ]);
-                Session::save();
-            }
-        } else {
-            $authToken = $sessionData['value'];
-        }
-
-        if (!$authToken) {
-            return redirect()->route('nse.index')->withErrors('Unable to authenticate with NSE API.');
-        }
-
-        $fileRecord = NseContent::findOrFail($id);
-
-        $relativePath = "nse_cache/{$fileRecord->segment}/{$fileRecord->parent_folder}/{$fileRecord->name}";
-        $absolutePath = Storage::path($relativePath);
-
-        $shouldDownload = true;
-
-        if (Storage::exists($relativePath)) {
-            $localTimestamp = Storage::lastModified($relativePath);
-            $remoteTimestamp = $fileRecord->nse_modified_at ? $fileRecord->nse_modified_at->timestamp : 0;
-
-            if ($localTimestamp >= $remoteTimestamp) {
-                $shouldDownload = false;
-            }
-        }
-
-        if ($shouldDownload) {
-            $directory = dirname($relativePath);
-            if (!Storage::exists($directory)) {
-                Storage::makeDirectory($directory);
-            }
-
-            $success = $this->nseService->downloadFileFromApi(
-                $authToken,
-                $fileRecord->segment,
-                Str::studly($fileRecord->parent_folder),
-                $fileRecord->name,
-                $absolutePath
-            );
-
-            if (!$success) {
-                return back()->withErrors('Failed to download file from NSE.');
-            }
-
-            if ($fileRecord->nse_modified_at) {
-                touch($absolutePath, $fileRecord->nse_modified_at->timestamp);
-            }
-        }
-
-        return Storage::download($relativePath, $fileRecord->name);
+        return response()->json(['success' => true]);
     }
+
+    // public function downloadFile($id)
+    // {
+    //     $sessionData = Session::get('nse_auth_token');
+    //     $now = now()->timestamp;
+
+    //     $needsNewToken = !$sessionData ||
+    //         !is_array($sessionData) ||
+    //         ($sessionData['expires_at'] ?? 0) < $now ||
+    //         empty($sessionData['value']);
+
+    //     if ($needsNewToken) {
+    //         $authToken = $this->nseService->getAuthToken();
+    //         if ($authToken) {
+    //             Session::put('nse_auth_token', [
+    //                 'value' => $authToken,
+    //                 'expires_at' => now()->addMinutes(60)->timestamp
+    //             ]);
+    //             Session::save();
+    //         }
+    //     } else {
+    //         $authToken = $sessionData['value'];
+    //     }
+
+    //     if (!$authToken) {
+    //         return redirect()->route('nse.index')->withErrors('Unable to authenticate with NSE API.');
+    //     }
+
+    //     $fileRecord = NseContent::findOrFail($id);
+
+    //     $relativePath = "nse_cache/{$fileRecord->segment}/{$fileRecord->parent_folder}/{$fileRecord->name}";
+    //     $absolutePath = Storage::path($relativePath);
+
+    //     $shouldDownload = true;
+
+    //     if (Storage::exists($relativePath)) {
+    //         $localTimestamp = Storage::lastModified($relativePath);
+    //         $remoteTimestamp = $fileRecord->nse_modified_at ? $fileRecord->nse_modified_at->timestamp : 0;
+
+    //         if ($localTimestamp >= $remoteTimestamp) {
+    //             $shouldDownload = false;
+    //         }
+    //     }
+
+    //     if ($shouldDownload) {
+    //         $directory = dirname($relativePath);
+    //         if (!Storage::exists($directory)) {
+    //             Storage::makeDirectory($directory);
+    //         }
+
+    //         $success = $this->nseService->downloadFileFromApi(
+    //             $authToken,
+    //             $fileRecord->segment,
+    //             Str::studly($fileRecord->parent_folder),
+    //             $fileRecord->name,
+    //             $absolutePath
+    //         );
+
+    //         if (!$success) {
+    //             return back()->withErrors('Failed to download file from NSE.');
+    //         }
+
+    //         if ($fileRecord->nse_modified_at) {
+    //             touch($absolutePath, $fileRecord->nse_modified_at->timestamp);
+    //         }
+    //     }
+
+    //     return Storage::download($relativePath, $fileRecord->name);
+    // }
     
     public function prepareDownload(Request $request, $id)
     {
