@@ -6,12 +6,16 @@ use App\Http\Controllers\Controller;
 use App\Models\NseContent;
 use App\Jobs\SyncNseFileJob;
 use App\Services\NSEService;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Session;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use ZipArchive;
 
 class NSEController extends Controller
 {
@@ -62,7 +66,10 @@ class NSEController extends Controller
         }
 
         $cacheKey = "nse_sync_" . Str::slug($segment . '_' . $folder . '_today');
+        $lastSynced = Cache::get($cacheKey . '_time');
+        $lastSyncedFormatted = $lastSynced ? Carbon::parse($lastSynced)->format('h:i:s A') : 'Never';
 
+        /*
         if (!Cache::has($cacheKey)) {
 
             $apiResponse = $this->nseService->getFolderFilesList(
@@ -79,22 +86,24 @@ class NSEController extends Controller
                 foreach ($apiResponse['data'] as $item) {
 
                     $dateString = $item['lastModified'] ?? $item['lastUpdated'] ?? null;
-                    $fileDate = $dateString ? \Carbon\Carbon::parse($dateString)->setTimezone('Asia/Kolkata') : null;
+                    $fileDate = $dateString ? Carbon::parse($dateString)->setTimezone('Asia/Kolkata') : null;
 
-                    if ($fileDate && $fileDate->toDateString() === $todayIST) {
+                    Log::info('Today Date' . $todayIST . ', FileDate' . $fileDate);
 
-                        $dataToUpsert[] = [
-                            'segment'         => Str::upper($segment),
-                            'parent_folder'   => $folder,
-                            'name'            => $item['name'],
-                            'type'            => $item['type'],
-                            'path'            => Str::upper($segment) . '/' . $folder . '/' . $item['name'],
-                            'size'            => $item['size'] ?? 0,
-                            'nse_modified_at' => $fileDate,
-                            'created_at'      => now(),
-                            'updated_at'      => now(),
-                        ];
-                    }
+                    // if ($fileDate && $fileDate->toDateString() === $todayIST) {
+
+                    $dataToUpsert[] = [
+                        'segment'         => Str::upper($segment),
+                        'parent_folder'   => $folder,
+                        'name'            => $item['name'],
+                        'type'            => $item['type'],
+                        'path'            => Str::upper($segment) . '/' . $folder . '/' . $item['name'],
+                        'size'            => $item['size'] ?? 0,
+                        'nse_modified_at' => $fileDate,
+                        'created_at'      => now(),
+                        'updated_at'      => now(),
+                    ];
+                    // }
                 }
 
                 if (!empty($dataToUpsert)) {
@@ -102,29 +111,101 @@ class NSEController extends Controller
                 }
 
                 Cache::put($cacheKey, true, now()->addMinutes(5));
+                Cache::put($cacheKey . '_time', now(), now()->addMinutes(5));
             }
         }
-
-        $todayStart = now()->setTimezone('Asia/Kolkata')->startOfDay()->utc();
-        $todayEnd   = now()->setTimezone('Asia/Kolkata')->endOfDay()->utc();
-
+*/
         $contents = NseContent::where('segment', Str::upper($segment))
             ->where('parent_folder', $folder)
-            ->where('type', 'file')
-            ->whereBetween('nse_modified_at', [$todayStart, $todayEnd])
             ->orderBy('type', 'desc')
             ->orderBy('nse_modified_at', 'desc')
             ->get();
 
         return view('admin.nse.segment_folder_today', [
-            'segment'   => $segment,
-            'folder'    => $folder,
-            'contents'  => $contents,
-            'authToken' => $authToken
+            'segment'     => $segment,
+            'folder'      => $folder,
+            'contents'    => $contents,
+            'authToken'   => $authToken,
+            'lastSynced'  => $lastSyncedFormatted
         ]);
     }
 
-    public function clearFolderCache($segment, $folder)
+    public function syncMemberSegment($segment, $folder)
+    {
+        $authToken = Session::get('nse_auth_token.value');
+        if (!$authToken) {
+            return response()->json(['success' => false, 'message' => 'Authentication token not found.']);
+        }
+
+        $this->clearFolderCache($segment, $folder);
+
+        $allFiles = [];
+        $apiResponseData = $this->syncFolderRecursive($authToken, Str::upper($segment), $folder ?: 'root', $allFiles);
+
+        if (is_array($apiResponseData)) {
+            foreach ($apiResponseData as $subdata) {
+                if (isset($subdata['type']) && $subdata['type'] === 'Folder') {
+                    $this->syncFolderRecursive(
+                        $authToken, Str::upper($segment), (($folder == 'root') ? '/' : $folder .'/') . $subdata['name'], $allFiles
+                    );
+                }
+            }
+            Log::info("Sync completed for segment: {$segment}, folder: {$folder}.");
+        } else {
+            Log::warning("Sync completed for segment: {$segment}, folder: {$folder}. No data returned from API.");
+        }
+
+        $cacheKey = "nse_sync_" . Str::slug($segment . '_' . $folder . '_today');
+        Cache::put($cacheKey . '_time', now()->toDateTimeString(), now()->addHours(24));
+
+        return response()->json(['success' => true]);
+    }
+
+    /**
+     * Recursive Helper: Fetches files for a path, stores them, and dives into subfolders.
+     */
+    private function syncFolderRecursive($authToken, $segment, $currentPath, &$allFiles)
+    {
+        Log::info("Syncing Path: " . $currentPath);
+
+        $apiResponse = $this->nseService->getFolderFilesList(
+            $authToken,
+            $segment,
+            ($currentPath === 'root') ? '' : $currentPath
+        );
+
+        if (!isset($apiResponse['data']) || !is_array($apiResponse['data'])) {
+            Log::warning("No data found or invalid response for path: " . $currentPath);
+            return;
+        }
+
+        $dataToUpsert = [];
+
+        foreach ($apiResponse['data'] as $item) {
+            $dateString = $item['lastUpdated'] ?? $item['lastModified'] ?? null;
+
+            $dataToUpsert[] = [
+                'segment'         => $segment,
+                'parent_folder'   => $currentPath,
+                'name'            => $item['name'],
+                'type'            => $item['type'],
+                'path'            => $segment . '/' . $currentPath . '/' . $item['name'],
+                'size'            => $item['size'] ?? 0,
+                'nse_modified_at' => $dateString ? Carbon::parse($dateString) : null,
+                'created_at'      => now(),
+                'updated_at'      => now(),
+            ];
+        }
+
+        if (!empty($dataToUpsert)) {
+            NseContent::upsert($dataToUpsert, ['path'], ['size', 'nse_modified_at', 'updated_at']);
+        }
+
+        return $apiResponse['data'];
+        
+    }
+
+    private function clearFolderCache($segment, $folder)
     {
         $cacheKey = "nse_sync_" . Str::slug($segment . '_' . $folder . '_today');
 
@@ -164,6 +245,7 @@ class NSEController extends Controller
         $cacheKey = "nse_sync_" . Str::slug($segment . '_' . $folder);
 
         if (!Cache::has($cacheKey)) {
+
             $apiResponse = $this->nseService->getFolderFilesList(
                 $authToken,
                 Str::upper($segment),
@@ -182,7 +264,7 @@ class NSEController extends Controller
                         'type'            => $item['type'],
                         'path'            => Str::upper($segment) . '/' . $folder . '/' . $item['name'],
                         'size'            => $item['size'] ?? 0,
-                        'nse_modified_at' => $dateString ? \Carbon\Carbon::parse($dateString) : null,
+                        'nse_modified_at' => $dateString ? Carbon::parse($dateString) : null,
                         'created_at'      => now(),
                         'updated_at'      => now(),
                     ];
@@ -206,10 +288,14 @@ class NSEController extends Controller
             ->orderBy('type', 'desc')
             ->get();
 
+        $groupedContents = $contents->groupBy(function ($item) {
+            return $item->nse_modified_at->format('Y-m-d');
+        });
+
         return view('admin.nse.segment_folder_archives', [
             'segment'   => $segment,
             'folder'    => $folder,
-            'contents'  => $contents,
+            'groupedContents'  => $groupedContents,
             'authToken' => $authToken
         ]);
     }
@@ -223,75 +309,6 @@ class NSEController extends Controller
         return response()->json(['success' => true]);
     }
 
-    // public function downloadFile($id)
-    // {
-    //     $sessionData = Session::get('nse_auth_token');
-    //     $now = now()->timestamp;
-
-    //     $needsNewToken = !$sessionData ||
-    //         !is_array($sessionData) ||
-    //         ($sessionData['expires_at'] ?? 0) < $now ||
-    //         empty($sessionData['value']);
-
-    //     if ($needsNewToken) {
-    //         $authToken = $this->nseService->getAuthToken();
-    //         if ($authToken) {
-    //             Session::put('nse_auth_token', [
-    //                 'value' => $authToken,
-    //                 'expires_at' => now()->addMinutes(60)->timestamp
-    //             ]);
-    //             Session::save();
-    //         }
-    //     } else {
-    //         $authToken = $sessionData['value'];
-    //     }
-
-    //     if (!$authToken) {
-    //         return redirect()->route('nse.index')->withErrors('Unable to authenticate with NSE API.');
-    //     }
-
-    //     $fileRecord = NseContent::findOrFail($id);
-
-    //     $relativePath = "nse_cache/{$fileRecord->segment}/{$fileRecord->parent_folder}/{$fileRecord->name}";
-    //     $absolutePath = Storage::path($relativePath);
-
-    //     $shouldDownload = true;
-
-    //     if (Storage::exists($relativePath)) {
-    //         $localTimestamp = Storage::lastModified($relativePath);
-    //         $remoteTimestamp = $fileRecord->nse_modified_at ? $fileRecord->nse_modified_at->timestamp : 0;
-
-    //         if ($localTimestamp >= $remoteTimestamp) {
-    //             $shouldDownload = false;
-    //         }
-    //     }
-
-    //     if ($shouldDownload) {
-    //         $directory = dirname($relativePath);
-    //         if (!Storage::exists($directory)) {
-    //             Storage::makeDirectory($directory);
-    //         }
-
-    //         $success = $this->nseService->downloadFileFromApi(
-    //             $authToken,
-    //             $fileRecord->segment,
-    //             Str::studly($fileRecord->parent_folder),
-    //             $fileRecord->name,
-    //             $absolutePath
-    //         );
-
-    //         if (!$success) {
-    //             return back()->withErrors('Failed to download file from NSE.');
-    //         }
-
-    //         if ($fileRecord->nse_modified_at) {
-    //             touch($absolutePath, $fileRecord->nse_modified_at->timestamp);
-    //         }
-    //     }
-
-    //     return Storage::download($relativePath, $fileRecord->name);
-    // }
-    
     public function prepareDownload(Request $request, $id)
     {
         try {
@@ -333,5 +350,93 @@ class NSEController extends Controller
         }
 
         return Storage::download($relativePath, $fileRecord->name);
+    }
+
+
+    public function prepareBulkDownload(Request $request)
+    {
+        try {
+            $sessionData = Session::get('nse_auth_token');
+            $now = now()->timestamp;
+            $needsNewToken = !$sessionData || !is_array($sessionData) || ($sessionData['expires_at'] ?? 0) < $now || empty($sessionData['value']);
+
+            if ($needsNewToken) {
+                $authToken = $this->nseService->getAuthToken();
+                if ($authToken) {
+                    Session::put('nse_auth_token', ['value' => $authToken, 'expires_at' => now()->addMinutes(60)->timestamp]);
+                    Session::save();
+                }
+            } else {
+                $authToken = $sessionData['value'];
+            }
+
+            if (!$authToken) {
+                return response()->json(['success' => false, 'message' => 'Authentication failed.'], 401);
+            }
+
+            $ids = $request->input('ids', []);
+            if (empty($ids)) {
+                return response()->json(['success' => false, 'message' => 'No files selected.'], 400);
+            }
+
+            foreach ($ids as $id) {
+                try {
+                    SyncNseFileJob::dispatchSync($id, $authToken);
+                } catch (\Exception $e) {
+                    Log::error("Failed to sync file ID $id: " . $e->getMessage());
+                }
+            }
+
+            $files = NseContent::whereIn('id', $ids)->get();
+
+            if ($files->isEmpty()) {
+                return response()->json(['success' => false, 'message' => 'Files not found in database.'], 404);
+            }
+
+            $zipFileName = 'nse_bulk_' . now()->format('Ymd_His') . '_' . Str::random(6) . '.zip';
+            $relativePath = 'nse_temp_zips/' . $zipFileName;
+            $absolutePath = Storage::path($relativePath);
+
+            $directory = dirname($absolutePath);
+            if (!file_exists($directory)) {
+                mkdir($directory, 0755, true);
+            }
+
+            $zip = new ZipArchive;
+            if ($zip->open($absolutePath, ZipArchive::CREATE | ZipArchive::OVERWRITE) === TRUE) {
+                foreach ($files as $file) {
+                    $fileRelPath = "nse_cache/{$file->segment}/{$file->parent_folder}/{$file->name}";
+
+                    if (Storage::exists($fileRelPath)) {
+                        $zip->addFile(Storage::path($fileRelPath), $file->name);
+                    }
+                }
+                $zip->close();
+            } else {
+                return response()->json(['success' => false, 'message' => 'Failed to create ZIP archive.'], 500);
+            }
+
+            return response()->json([
+                'success' => true,
+                'url' => route('nse.bulk.serve', ['filename' => $zipFileName])
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
+        }
+    }
+
+
+    public function serveBulkZip($filename)
+    {
+        $filename = basename($filename);
+        $relativePath = 'nse_temp_zips/' . $filename;
+
+        if (!Storage::exists($relativePath)) {
+            abort(404, 'Zip file expired or not found.');
+        }
+
+        $absolutePath = Storage::path($relativePath);
+
+        return response()->download($absolutePath)->deleteFileAfterSend(true);
     }
 }

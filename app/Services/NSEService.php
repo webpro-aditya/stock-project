@@ -68,12 +68,16 @@ class NSEService
     {
         $creds = $this->nseCredentials;
 
+        $folder = ($folder == 'Root') ? '' : $folder;
+
         $queryParams = http_build_query([
             'segment'    => $segment,
             'folderPath' => '/' . $folder
         ]);
 
         $url = "{$creds['base_url']}/member/content/{$creds['version']}?" . urldecode($queryParams);
+        
+        Log::info("NSE API Request: " . $url);
 
         $headers = [
             'Authorization: Bearer ' . $authToken,
@@ -87,7 +91,7 @@ class NSEService
         curl_setopt_array($curl, [
             CURLOPT_URL            => $url,
             CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_TIMEOUT        => 30,
+            CURLOPT_TIMEOUT        => 300,
             CURLOPT_FOLLOWLOCATION => true,
             CURLOPT_HTTP_VERSION   => CURL_HTTP_VERSION_1_1,
             CURLOPT_CUSTOMREQUEST  => 'GET',

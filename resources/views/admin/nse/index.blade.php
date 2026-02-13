@@ -164,7 +164,7 @@
 <div class="content-wrapper">
     <div class="content-header">
         <div class="container-fluid">
-            <div class="row mb-2">
+            <!-- <div class="row mb-2">
                 <div class="col-sm-6">
                     <h1 class="m-0">File Manager</h1>
                 </div>
@@ -175,7 +175,7 @@
                         <li class="breadcrumb-item active"><a href="#">Segments</a></li>
                     </ol>
                 </div>
-            </div>
+            </div> -->
         </div>
     </div>
 
@@ -183,7 +183,7 @@
         <div class="container-fluid">
             <div class="row">
                 <div class="col-12">
-                    <div class="explorer-container">
+                    {{--<div class="explorer-container">
                         <div class="explorer-toolbar">
                             <span class="view-title">NSE Segments</span>
                             <div class="view-controls" id="btnGroup">
@@ -217,7 +217,7 @@
                                 </a>
                             @endforeach
                         </div>
-                    </div>
+                    </div>--}}
                 </div>
             </div>
         </div>
@@ -227,6 +227,7 @@
 
 @section('script')
 <script>
+    /*
     // Using window scope to ensure availability if using Vite/Mix
     window.changeView = function(viewClass, btnElement) {
         const canvas = document.getElementById('folderCanvas');
@@ -260,5 +261,6 @@
         
         window.changeView(savedView, buttons[btnMap[savedView]]);
     });
+    */
 </script>
 @endsection

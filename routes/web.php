@@ -41,14 +41,19 @@ Route::group(['middleware' => 'auth'], function () {
         // Route::get('/files/nse/{id}/download', [NSEController::class, 'downloadFile'])->name('nse.segment.downloadFile');
         Route::get('/nse/download/prepare/{id}', [NseController::class, 'prepareDownload'])->name('nse.file.prepare');
         Route::get('/nse/download/serve/{id}', [NseController::class, 'serveFile'])->name('nse.file.serve');
-        Route::post('/nse/sync/clear/{segment}/{folder}', [NseController::class, 'clearFolderCache'])->name('nse.sync.clear');
+        Route::post('/nse/sync/clear/{segment}/{folder}', [NseController::class, 'syncMemberSegment'])->name('nse.sync.clear');
         Route::post('/nse/archive/sync/clear/{segment}/{folder}', [NseController::class, 'clearArchiveFolderCache'])->name('nse.archive.sync.clear');
+        // Route to handle the AJAX preparation (Syncs files & Creates Zip)
+        Route::post('/nse/download/bulk/prepare', [NseController::class, 'prepareBulkDownload'])->name('nse.download.bulk.prepare');
+
+        // Route to serve the generated Zip
+        Route::get('/nse/download/bulk/serve/{filename}', [NseController::class, 'serveBulkZip'])->name('nse.bulk.serve');
 
         // BSE
         // Route::get('/files/bse', [BSEController::class, 'index'])->name('bse.index');
         // Route::get('/files/bse/{segment}', [BSEController::class, 'index'])->name('nse.segment');
         // Route::get('/files/nse/{segment}/{folder}', [BSEController::class, 'getSegmentFolder'])->name('nse.segment.folder');
-      
+
     });
 });
 

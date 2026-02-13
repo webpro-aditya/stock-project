@@ -1,121 +1,117 @@
-<style>
-    .custom-sidebar-bg {
-        background-color: #0f172a !important; /* Deep Navy Blue */
-    }
-    .brand-link {
-        border-bottom: 1px solid #1e293b !important;
-    }
-    .nav-header {
-        color: #64748b !important; /* Muted blue-grey text */
-        font-size: 0.75rem !important;
-        font-weight: 700 !important;
-        letter-spacing: 0.05em;
-        margin-top: 10px;
-    }
-    .nav-link {
-        color: #94a3b8 !important; /* Light grey text */
-    }
-    .nav-link.active {
-        background-color: #3b82f6 !important; /* Bright Blue Active State */
-        color: #ffffff !important;
-    }
-    .nav-link:hover {
-        color: #ffffff;
-    }
-    .nav-treeview .nav-link p {
-        font-size: 0.9rem;
-    }
-</style>
+<aside id="sidebar" class="bg-[#0f172a] text-slate-400 w-72 flex flex-col border-r border-slate-900 z-20 shadow-xl shrink-0">
 
-<aside class="main-sidebar sidebar-dark-primary elevation-4 custom-sidebar-bg">
-    <a href="{{ route('dashboard.index') }}" class="brand-link">
-        <img src="{{ asset('assets/img/AdminLTELogo.png') }}" alt="Logo" class="brand-image img-circle elevation-3" style="opacity: .8">
-        <span class="brand-text font-weight-bold text-white">SyncConsole</span>
-    </a>
+    <div class="h-16 flex items-center justify-between px-4 border-b border-slate-800 bg-[#0f172a]">
+        <div class="flex items-center gap-3 overflow-hidden whitespace-nowrap">
+            <img src="{{ asset('assets/img/logo.ico') }}" alt="Logo" class="h-8 w-8 min-w-[2rem] rounded-lg object-contain bg-white/5">
 
-    <div class="sidebar">
-        
-        <nav class="mt-3">
-            <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu" data-accordion="false">
-                
-                <li class="nav-header">NSE MARKET</li>
-
-                <li class="nav-item"> 
-                    <a href="#" class="nav-link">
-                        <i class="nav-icon fas fa-user-tie"></i> <p>
-                            Member Segment
-                            <i class="right fas fa-angle-left"></i>
-                        </p>
-                    </a>
-                    <ul class="nav nav-treeview">
-                        <li class="nav-item">
-                            <a href="{{ route('nse.segment.folder.today', ['segment' => 'cm', 'folder' => 'reports']) }}" class="nav-link">
-                                <p class="pl-4">CM</p> </a>
-                        </li>
-                        <li class="nav-item">
-                            <a href="{{ route('nse.segment.folder.today', ['segment' => 'co', 'folder' => 'reports']) }}" class="nav-link">
-                                <p class="pl-4">CO</p>
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a href="{{ route('nse.segment.folder.today', ['segment' => 'cd', 'folder' => 'reports']) }}" class="nav-link">
-                                <p class="pl-4">CD</p>
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a href="{{ route('nse.segment.folder.today', ['segment' => 'fo', 'folder' => 'reports']) }}" class="nav-link">
-                                <p class="pl-4">FO</p>
-                            </a>
-                        </li>
-                    </ul>
-                </li>
-
-                <li class="nav-item">
-                    <a href="#" class="nav-link">
-                        <i class="nav-icon fas fa-layer-group"></i> <p>
-                            Common Segment
-                            <i class="right fas fa-angle-left"></i>
-                        </p>
-                    </a>
-                    <ul class="nav nav-treeview">
-                        <li class="nav-item">
-                            <a href="{{ route('nse.segment.folder.today', ['segment' => 'cm', 'folder' => 'common']) }}" class="nav-link">
-                                <p class="pl-4">CM</p>
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a href="{{ route('nse.segment.folder.today', ['segment' => 'co', 'folder' => 'common']) }}" class="nav-link">
-                                <p class="pl-4">CO</p>
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a href="{{ route('nse.segment.folder.today', ['segment' => 'cd', 'folder' => 'common']) }}" class="nav-link">
-                                <p class="pl-4">CD</p>
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a href="{{ route('nse.segment.folder.today', ['segment' => 'fo', 'folder' => 'common']) }}" class="nav-link">
-                                <p class="pl-4">FO</p>
-                            </a>
-                        </li>
-                    </ul>
-                </li>
-
-                <li class="nav-header">EXTERNAL</li>
-
-                <li class="nav-item">
-                    <a href="#" class="nav-link">
-                        <i class="nav-icon fas fa-chart-bar"></i> <p>BSE Market</p>
-                    </a>
-                </li>
-
-                <li class="nav-item">
-                    <a href="#" class="nav-link">
-                        <i class="nav-icon fas fa-globe"></i> <p>MCX Market</p>
-                    </a>
-                </li>
-
-            </ul>
-        </nav>
+            <div class="logo-text">
+                <h1 class="text-slate-100 font-bold tracking-tight">SyncConsole</h1>
+            </div>
         </div>
-    </aside>
+        <button onclick="toggleSidebar()" class="text-slate-500 hover:text-white p-1 rounded-md hover:bg-slate-800 transition-colors">
+            <i data-lucide="panel-left" class="w-5 h-5"></i>
+        </button>
+    </div>
+
+    <nav class="flex-1 overflow-y-auto px-3 py-6 space-y-6">
+
+        <div>
+            <div class="nav-group-title px-3 mb-2 text-xs font-bold text-brand uppercase tracking-widest" style="color: var(--brand-color);">NSE Market</div>
+
+            <div class="mb-1">
+                <button onclick="toggleSubmenu('nse-member-sub', this)" class="nav-item w-full flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-slate-800 hover:text-slate-100 transition-all text-sm group text-slate-300">
+                    <div class="flex items-center gap-3">
+                        <i data-lucide="users" class="w-5 h-5 text-slate-500 group-hover:text-brand transition-colors"></i>
+                        <span class="nav-text font-medium">Member Segment</span>
+                    </div>
+                    <i data-lucide="chevron-down" class="w-4 h-4 chevron transition-transform duration-200"></i>
+                </button>
+
+                <div id="nse-member-sub" class="submenu pl-10 space-y-1">
+                    <a href="{{ route('nse.segment.folder.today', ['segment' => 'cm', 'folder' => 'root']) }}" class="w-full text-left py-2 text-xs hover:text-white text-slate-500 block border-l border-slate-700 pl-4 hover:border-brand transition-colors">CM</a>
+                    <a href="{{ route('nse.segment.folder.today', ['segment' => 'co', 'folder' => 'root']) }}" class="w-full text-left py-2 text-xs hover:text-white text-slate-500 block border-l border-slate-700 pl-4 hover:border-brand transition-colors">CO</a>
+                    <a href="{{ route('nse.segment.folder.today', ['segment' => 'cd', 'folder' => 'root']) }}" class="w-full text-left py-2 text-xs hover:text-white text-slate-500 block border-l border-slate-700 pl-4 hover:border-brand transition-colors">CD</a>
+                    <a href="{{ route('nse.segment.folder.today', ['segment' => 'fo', 'folder' => 'root']) }}" class="w-full text-left py-2 text-xs hover:text-white text-slate-500 block border-l border-slate-700 pl-4 hover:border-brand transition-colors">FO</a>
+                </div>
+            </div>
+
+            <div>
+                <button onclick="toggleSubmenu('nse-common-sub', this)" class="nav-item w-full flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-slate-800 hover:text-slate-100 transition-all text-sm group text-slate-300">
+                    <div class="flex items-center gap-3">
+                        <i data-lucide="layers" class="w-5 h-5 text-slate-500 group-hover:text-brand transition-colors"></i>
+                        <span class="nav-text font-medium">Common Segment</span>
+                    </div>
+                    <i data-lucide="chevron-down" class="w-4 h-4 chevron transition-transform duration-200"></i>
+                </button>
+
+                <div id="nse-common-sub" class="submenu pl-10 space-y-1">
+                    <a href="#" class="w-full text-left py-2 text-xs hover:text-white text-slate-500 block border-l border-slate-700 pl-4 hover:border-brand transition-colors">CM</a>
+                    <a href="#" class="w-full text-left py-2 text-xs hover:text-white text-slate-500 block border-l border-slate-700 pl-4 hover:border-brand transition-colors">CO</a>
+                    <a href="#" class="w-full text-left py-2 text-xs hover:text-white text-slate-500 block border-l border-slate-700 pl-4 hover:border-brand transition-colors">CD</a>
+                    <a href="#" class="w-full text-left py-2 text-xs hover:text-white text-slate-500 block border-l border-slate-700 pl-4 hover:border-brand transition-colors">FO</a>
+                </div>
+            </div>
+        </div>
+
+        <div>
+            <div class="nav-group-title px-3 mb-2 text-xs font-bold text-slate-500 uppercase tracking-widest">External</div>
+            <ul class="space-y-1">
+                <li>
+                    <a href="#" class="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-slate-800 hover:text-slate-100 transition-all text-sm group">
+                        <i data-lucide="bar-chart-2" class="w-5 h-5 text-slate-500 group-hover:text-brand transition-colors"></i>
+                        <span class="nav-text font-medium">BSE Market</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="#" class="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-slate-800 hover:text-slate-100 transition-all text-sm group">
+                        <i data-lucide="globe" class="w-5 h-5 text-slate-500 group-hover:text-brand transition-colors"></i>
+                        <span class="nav-text font-medium">MCX Market</span>
+                    </a>
+                </li>
+            </ul>
+        </div>
+    </nav>
+
+    <div class="p-4 border-t border-slate-800">
+        <div class="flex items-center justify-between">
+            <div class="text-sm">
+                <p class="font-semibold text-slate-200">Welcome, {{ auth()->user()->name }}</p>
+            </div>
+            <form action="{{ route('admin.logout') }}" method="post">
+                @csrf
+                <button type="submit" class="flex items-center gap-2 text-sm font-semibold text-red-500 hover:text-red-400 transition-colors">
+                    <i data-lucide="log-out" class="w-4 h-4"></i>
+                </button>
+            </form>
+        </div>
+    </div>
+</aside>
+
+<script>
+    function toggleSidebar() {
+        document.getElementById('sidebar').classList.toggle('collapsed');
+    }
+
+    function toggleSubmenu(id, btn) {
+        const menu = document.getElementById(id);
+        const icon = btn.querySelector('.chevron');
+
+        document.querySelectorAll('.submenu').forEach(el => {
+            if (el.id !== id) {
+                el.classList.remove('open');
+                const otherIcon = el.previousElementSibling.querySelector('.chevron');
+                if (otherIcon) {
+                    otherIcon.classList.remove('rotate-180');
+                }
+            }
+        });
+
+        if (menu.classList.contains('open')) {
+            menu.classList.remove('open');
+            icon.classList.remove('rotate-180');
+        } else {
+            menu.classList.add('open');
+            icon.classList.add('rotate-180');
+        }
+    }
+</script>
