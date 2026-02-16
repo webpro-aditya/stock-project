@@ -54,10 +54,11 @@ class SyncNseFileJob
             }
 
             // Call the Service Function
+            $folderParam = ($fileRecord->parent_folder === 'root' || $fileRecord->parent_folder === 'Root' || $fileRecord->parent_folder === '') ? '' : $fileRecord->parent_folder;
             $success = $nseService->downloadFileFromApi(
                 $this->authToken,
                 $fileRecord->segment,
-                Str::studly($fileRecord->parent_folder),
+                $folderParam,
                 $fileRecord->name,
                 $absolutePath
             );

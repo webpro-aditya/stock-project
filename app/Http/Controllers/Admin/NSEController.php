@@ -71,7 +71,7 @@ class NSEController extends Controller
         $lastSyncedFormatted = $lastSynced ? Carbon::parse($lastSynced)->format('h:i:s A') : 'Never';
         
         $contents = NseContent::where('segment', Str::upper($segment))
-            ->where('parent_folder', $folder)
+            ->where('parent_folder', 'root')
             ->orderBy('type', 'desc')
             ->orderBy('nse_modified_at', 'desc')
             ->get();
