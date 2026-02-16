@@ -68,22 +68,32 @@ class NSEService
     {
         $creds = $this->nseCredentials;
 
-        $folder = ($folder == 'Root') ? '' : $folder;
+        $folder = $this->normalizeFolder($folder);
 
-        $queryParams = http_build_query([
-            'segment'    => $segment,
-            'folderPath' => '/' . $folder
-        ]);
+        $query = http_build_query(
+            [
+                'segment'    => $segment,
+                'folderPath' => $folder
+            ],
+            '',
+            '&',
+            PHP_QUERY_RFC3986
+        );
 
-        $url = "{$creds['base_url']}/member/content/{$creds['version']}?" . urldecode($queryParams);
-        
-        Log::info("NSE API Request: " . $url);
+        $url = "{$creds['base_url']}/member/content/{$creds['version']}?$query";
+
+        if (filter_var($url, FILTER_VALIDATE_URL) === false) {
+            Log::error('INVALID URL GENERATED', [
+                'folder' => $folder,
+                'url' => $url
+            ]);
+        }
+
 
         $headers = [
             'Authorization: Bearer ' . $authToken,
-            'Content-Type: application/json',
             'Accept: application/json',
-            'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0'
+            'User-Agent: Mozilla/5.0'
         ];
 
         $curl = curl_init();
@@ -95,8 +105,8 @@ class NSEService
             CURLOPT_FOLLOWLOCATION => true,
             CURLOPT_HTTP_VERSION   => CURL_HTTP_VERSION_1_1,
             CURLOPT_CUSTOMREQUEST  => 'GET',
-            CURLOPT_SSL_VERIFYPEER => false,
             CURLOPT_HTTPHEADER     => $headers,
+            CURLOPT_SSL_VERIFYPEER => true, // turn OFF only locally
         ]);
 
         $response = curl_exec($curl);
@@ -111,11 +121,38 @@ class NSEService
         }
 
         if ($info['http_code'] !== 200) {
-            Log::warning("NSE API non-200 response: " . $info['http_code'], ['body' => $response]);
+            Log::warning("NSE API non-200 response", [
+                'code' => $info['http_code'],
+                'body' => $response
+            ]);
         }
 
         return json_decode($response, true);
     }
+
+   private function normalizeFolder(?string $folder): string
+{
+    if (!$folder) {
+        return '';
+    }
+
+    // remove invisible unicode characters
+    $folder = preg_replace('/[\x00-\x1F\x7F\xA0]/u', '', $folder);
+
+    // collapse multiple spaces
+    $folder = preg_replace('/\s+/', ' ', $folder);
+
+    $folder = trim($folder);
+
+    if (strtolower($folder) === 'root') {
+        return '';
+    }
+
+    return trim($folder, '/');
+}
+
+
+
 
     public function downloadFileFromApi($authToken, $segment, $folder, $fileName, $savePath)
     {

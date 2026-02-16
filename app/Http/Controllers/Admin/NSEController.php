@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\NseContent;
 use App\Jobs\SyncNseFileJob;
+use App\Jobs\SyncNseFolders;
 use App\Services\NSEService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -37,7 +38,7 @@ class NSEController extends Controller
         return view('admin.nse.segment', ['segment' => $segment]);
     }
 
-    public function getTodaySegmentFolder($segment, $folder)
+    public function getTodaySegmentFolder(Request $request, $segment, $folder)
     {
         $sessionData = Session::get('nse_auth_token');
         $now = now()->timestamp;
@@ -68,58 +69,20 @@ class NSEController extends Controller
         $cacheKey = "nse_sync_" . Str::slug($segment . '_' . $folder . '_today');
         $lastSynced = Cache::get($cacheKey . '_time');
         $lastSyncedFormatted = $lastSynced ? Carbon::parse($lastSynced)->format('h:i:s A') : 'Never';
-
-        /*
-        if (!Cache::has($cacheKey)) {
-
-            $apiResponse = $this->nseService->getFolderFilesList(
-                $authToken,
-                Str::upper($segment),
-                Str::studly($folder)
-            );
-
-            if (isset($apiResponse['data']) && is_array($apiResponse['data'])) {
-                $dataToUpsert = [];
-
-                $todayIST = now()->setTimezone('Asia/Kolkata')->toDateString();
-
-                foreach ($apiResponse['data'] as $item) {
-
-                    $dateString = $item['lastModified'] ?? $item['lastUpdated'] ?? null;
-                    $fileDate = $dateString ? Carbon::parse($dateString)->setTimezone('Asia/Kolkata') : null;
-
-                    Log::info('Today Date' . $todayIST . ', FileDate' . $fileDate);
-
-                    // if ($fileDate && $fileDate->toDateString() === $todayIST) {
-
-                    $dataToUpsert[] = [
-                        'segment'         => Str::upper($segment),
-                        'parent_folder'   => $folder,
-                        'name'            => $item['name'],
-                        'type'            => $item['type'],
-                        'path'            => Str::upper($segment) . '/' . $folder . '/' . $item['name'],
-                        'size'            => $item['size'] ?? 0,
-                        'nse_modified_at' => $fileDate,
-                        'created_at'      => now(),
-                        'updated_at'      => now(),
-                    ];
-                    // }
-                }
-
-                if (!empty($dataToUpsert)) {
-                    NseContent::upsert($dataToUpsert, ['path'], ['size', 'nse_modified_at', 'updated_at']);
-                }
-
-                Cache::put($cacheKey, true, now()->addMinutes(5));
-                Cache::put($cacheKey . '_time', now(), now()->addMinutes(5));
-            }
-        }
-*/
+        
         $contents = NseContent::where('segment', Str::upper($segment))
             ->where('parent_folder', $folder)
             ->orderBy('type', 'desc')
             ->orderBy('nse_modified_at', 'desc')
             ->get();
+
+        if ($request->has('folder') && $request->query('folder') !== $folder) {
+            $contents = NseContent::where('segment', Str::upper($segment))
+                ->where('parent_folder', $request->query('folder'))
+                ->orderBy('type', 'desc')
+                ->orderBy('nse_modified_at', 'desc')
+                ->get();
+        }
 
         return view('admin.nse.segment_folder_today', [
             'segment'     => $segment,
@@ -130,89 +93,29 @@ class NSEController extends Controller
         ]);
     }
 
-    public function syncMemberSegment($segment, $folder)
+    public function syncMemberSegment($segment)
     {
         $authToken = Session::get('nse_auth_token.value');
+
         if (!$authToken) {
-            return response()->json(['success' => false, 'message' => 'Authentication token not found.']);
+            return response()->json([
+                'success' => false,
+                'message' => 'Authentication token missing.'
+            ]);
         }
 
-        $this->clearFolderCache($segment, $folder);
-
-        $allFiles = [];
-        $apiResponseData = $this->syncFolderRecursive($authToken, Str::upper($segment), $folder ?: 'root', $allFiles);
-
-        if (is_array($apiResponseData)) {
-            foreach ($apiResponseData as $subdata) {
-                if (isset($subdata['type']) && $subdata['type'] === 'Folder') {
-                    $this->syncFolderRecursive(
-                        $authToken, Str::upper($segment), (($folder == 'root') ? '/' : $folder .'/') . $subdata['name'], $allFiles
-                    );
-                }
-            }
-            Log::info("Sync completed for segment: {$segment}, folder: {$folder}.");
-        } else {
-            Log::warning("Sync completed for segment: {$segment}, folder: {$folder}. No data returned from API.");
-        }
-
-        $cacheKey = "nse_sync_" . Str::slug($segment . '_' . $folder . '_today');
-        Cache::put($cacheKey . '_time', now()->toDateTimeString(), now()->addHours(24));
-
-        return response()->json(['success' => true]);
-    }
-
-    /**
-     * Recursive Helper: Fetches files for a path, stores them, and dives into subfolders.
-     */
-    private function syncFolderRecursive($authToken, $segment, $currentPath, &$allFiles)
-    {
-        Log::info("Syncing Path: " . $currentPath);
-
-        $apiResponse = $this->nseService->getFolderFilesList(
+        SyncNseFolders::dispatch(
             $authToken,
             $segment,
-            ($currentPath === 'root') ? '' : $currentPath
+            '' // NEVER pass root
         );
 
-        if (!isset($apiResponse['data']) || !is_array($apiResponse['data'])) {
-            Log::warning("No data found or invalid response for path: " . $currentPath);
-            return;
-        }
-
-        $dataToUpsert = [];
-
-        foreach ($apiResponse['data'] as $item) {
-            $dateString = $item['lastUpdated'] ?? $item['lastModified'] ?? null;
-
-            $dataToUpsert[] = [
-                'segment'         => $segment,
-                'parent_folder'   => $currentPath,
-                'name'            => $item['name'],
-                'type'            => $item['type'],
-                'path'            => $segment . '/' . $currentPath . '/' . $item['name'],
-                'size'            => $item['size'] ?? 0,
-                'nse_modified_at' => $dateString ? Carbon::parse($dateString) : null,
-                'created_at'      => now(),
-                'updated_at'      => now(),
-            ];
-        }
-
-        if (!empty($dataToUpsert)) {
-            NseContent::upsert($dataToUpsert, ['path'], ['size', 'nse_modified_at', 'updated_at']);
-        }
-
-        return $apiResponse['data'];
-        
+        return response()->json([
+            'success' => true,
+            'message' => 'NSE sync started in background.'
+        ]);
     }
 
-    private function clearFolderCache($segment, $folder)
-    {
-        $cacheKey = "nse_sync_" . Str::slug($segment . '_' . $folder . '_today');
-
-        Cache::forget($cacheKey);
-
-        return response()->json(['success' => true]);
-    }
 
     public function getArchiveSegmentFolder($segment, $folder)
     {

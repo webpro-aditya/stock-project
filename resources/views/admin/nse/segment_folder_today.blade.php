@@ -2,6 +2,12 @@
 
 @section('page_title', __('NSE Explorer - ' . Str::upper($segment)))
 
+@php
+    $folder = trim($folder ?? '', '/');
+    $parts = $folder ? explode('/', $folder) : [];
+    $path = '';
+@endphp
+
 @section('header-actions')
 <div class="text-right">
     <button onclick="syncNow('{{ $segment }}', '{{ $folder }}')"
@@ -22,6 +28,52 @@
                 Today's Activity
             </div>
         </div>
+
+        <nav class="mb-4 text-sm font-medium text-gray-600">
+            <ol class="flex items-center gap-2 flex-wrap">
+
+                {{-- Root --}}
+                <li>
+                    <a href="{{ route('nse.segment', ['segment' => $segment]) }}"
+                        class="hover:text-brand font-semibold">
+                        {{ Str::upper($segment) }}
+                    </a>
+                </li>
+
+                @foreach($parts as $index => $part)
+
+                @php
+                $path = $path ? $path.'/'.$part : $part;
+                @endphp
+
+                <li class="text-gray-400">/</li>
+
+                <li>
+                    @if($index === count($parts) - 1)
+
+                    {{-- Current folder --}}
+                    <span class="text-gray-900 font-semibold">
+                        {{ $part }}
+                    </span>
+
+                    @else
+
+                    {{-- Parent folder --}}
+                    <a href="{{ route('nse.segment.today', [
+                            'segment' => $segment,
+                            'folder' => $path
+                        ]) }}"
+                        class="hover:text-brand font-semibold">
+                        {{ $part }}
+                    </a>
+
+                    @endif
+                </li>
+
+                @endforeach
+
+            </ol>
+        </nav>
         <div class="relative overflow-x-auto" style="max-height: 60vh;">
             <table class="w-full text-sm text-left">
                 <thead class="text-xs text-gray-700 font-bold uppercase bg-gray-100 sticky top-0">
@@ -40,18 +92,20 @@
                     @forelse($contents as $item)
                     @php
                     $isFolder = $item->type == 'Folder';
-                    $url = $isFolder ? route('nse.segment', ['segment' => $segment, 'folder' => $item->name]) : '#';
+                    $url = 'folder=' . $item->parent_folder .'/'. $item->name;
                     $isModified = $item->created_at->ne($item->nse_modified_at);
+                    $currentPath = url()->current();
                     @endphp
                     <tr class="bg-white border-b border-gray-200 hover:bg-gray-50">
                         <td class="p-4">
-                            <input type="checkbox" value="{{ $item->id }}"  onchange="checkSelection()" class="row-selector w-4 h-4 custom-checkbox rounded border-gray-300">
+                            <input type="checkbox" value="{{ $item->id }}" onchange="checkSelection()" class="row-selector w-4 h-4 custom-checkbox rounded border-gray-300"
+                                @if ($isFolder) disabled @endif>
                         </td>
                         <td scope="row" class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">
-                            <a href="{{ $url }}" class="flex items-center gap-3">
+                            <a href="{{ $currentPath }}?{{$url}}" class="flex items-center gap-3">
                                 <div
                                     class="w-8 h-8 flex items-center justify-center {{ $isFolder ? 'bg-indigo-100 rounded-lg' : 'bg-indigo-100 rounded-lg' }}">
-                                   <i data-lucide="{{ $isFolder ? 'folder' : 'file' }}" class="w-5 h-5 {{ $isFolder ? 'text-yellow-500 fill-yellow-500/20' : 'text-indigo-600' }}"></i>
+                                    <i data-lucide="{{ $isFolder ? 'folder' : 'file' }}" class="w-5 h-5 {{ $isFolder ? 'text-yellow-500 fill-yellow-500/20' : 'text-indigo-600' }}"></i>
                                 </div>
                                 {{ $item->name }}
                             </a>
@@ -75,7 +129,7 @@
                             <button onclick="triggerDownload(this, {{ $item->id }})"
                                 class="font-semibold text-sm text-gray-700 bg-white border border-gray-300 hover:bg-gray-100 px-4 py-2 rounded-lg transition-colors">Download</button>
                             @else
-                            <a href="{{ $url }}"
+                            <a href="{{ $currentPath }}?{{$url}}"
                                 class="font-semibold text-sm text-gray-700 bg-white border border-gray-300 hover:bg-gray-100 px-4 py-2 rounded-lg transition-colors">Open</a>
                             @endif
                         </td>
@@ -306,7 +360,7 @@
 
         btn.disabled = true;
         btn.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin mr-2"></i> Zipping...';
-        lucide.createIcons(); 
+        lucide.createIcons();
 
         fetch("{{ route('nse.download.bulk.prepare') }}", {
                 method: 'POST',
