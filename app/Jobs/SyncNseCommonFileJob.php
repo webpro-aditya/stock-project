@@ -1,0 +1,75 @@
+<?php
+
+namespace App\Jobs;
+
+use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue; // Not used for sync, but good practice
+use Illuminate\Foundation\Bus\Dispatchable;
+use Illuminate\Queue\InteractsWithQueue;
+use Illuminate\Queue\SerializesModels;
+use App\Models\NseCommanContent;
+use App\Services\NSECommanService; // Ensure you import your service
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
+
+class SyncNseCommonFileJob
+{
+    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+
+    protected $fileId;
+    protected $authToken;
+
+    public function __construct($fileId, $authToken)
+    {
+        $this->fileId = $fileId;
+        $this->authToken = $authToken;
+    }
+
+    public function handle(NSECommanService $NSECommanService)
+    {
+        $fileRecord = NseCommanContent::findOrFail($this->fileId);
+
+        // 1. Prepare Path
+        $relativePath = "nse_cache/{$fileRecord->segment}/{$fileRecord->parent_folder}/{$fileRecord->name}";
+        $absolutePath = Storage::path($relativePath);
+
+        // 2. Smart Cache Check
+        $shouldDownload = true;
+        if (Storage::exists($relativePath)) {
+            $localTimestamp = Storage::lastModified($relativePath);
+            $remoteTimestamp = $fileRecord->nse_modified_at ? $fileRecord->nse_modified_at->timestamp : 0;
+
+            // If local file is fresh enough, skip download
+            if ($localTimestamp >= $remoteTimestamp) {
+                $shouldDownload = false;
+            }
+        }
+
+        // 3. Download from API if needed
+        if ($shouldDownload) {
+            // Ensure folder exists
+            $directory = dirname($relativePath);
+            if (!Storage::exists($directory)) {
+                Storage::makeDirectory($directory);
+            }
+
+            // Call the Service Function
+            $success = $NSECommanService->downloadFileFromApi(
+                $this->authToken,
+                $fileRecord->segment,
+                Str::studly($fileRecord->parent_folder),
+                $fileRecord->name,
+                $absolutePath
+            );
+
+            if (!$success) {
+                throw new \Exception("Failed to download file from NSE API.");
+            }
+
+            // Sync Timestamps
+            if ($fileRecord->nse_modified_at) {
+                touch($absolutePath, $fileRecord->nse_modified_at->timestamp);
+            }
+        }
+    }
+}

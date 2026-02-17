@@ -45,10 +45,10 @@
                 </button>
 
                 <div id="nse-common-sub" class="submenu pl-10 space-y-1">
-                    <a href="#" class="w-full text-left py-2 text-xs hover:text-white text-slate-500 block border-l border-slate-700 pl-4 hover:border-brand transition-colors">CM</a>
-                    <a href="#" class="w-full text-left py-2 text-xs hover:text-white text-slate-500 block border-l border-slate-700 pl-4 hover:border-brand transition-colors">CO</a>
-                    <a href="#" class="w-full text-left py-2 text-xs hover:text-white text-slate-500 block border-l border-slate-700 pl-4 hover:border-brand transition-colors">CD</a>
-                    <a href="#" class="w-full text-left py-2 text-xs hover:text-white text-slate-500 block border-l border-slate-700 pl-4 hover:border-brand transition-colors">FO</a>
+                    <a href="{{ route('nse.common.segment.folder.today', ['segment' => 'cm', 'folder' => 'root']) }}" class="w-full text-left py-2 text-xs hover:text-white text-slate-500 block border-l border-slate-700 pl-4 hover:border-brand transition-colors">CM</a>
+                    <a href="{{ route('nse.common.segment.folder.today', ['segment' => 'co', 'folder' => 'root']) }}" class="w-full text-left py-2 text-xs hover:text-white text-slate-500 block border-l border-slate-700 pl-4 hover:border-brand transition-colors">CO</a>
+                    <a href="{{ route('nse.common.segment.folder.today', ['segment' => 'cd', 'folder' => 'root']) }}" class="w-full text-left py-2 text-xs hover:text-white text-slate-500 block border-l border-slate-700 pl-4 hover:border-brand transition-colors">CD</a>
+                    <a href="{{ route('nse.common.segment.folder.today', ['segment' => 'fo', 'folder' => 'root']) }}" class="w-full text-left py-2 text-xs hover:text-white text-slate-500 block border-l border-slate-700 pl-4 hover:border-brand transition-colors">FO</a>
                 </div>
             </div>
         </div>

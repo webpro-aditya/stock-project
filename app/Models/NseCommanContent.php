@@ -1,0 +1,19 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+
+class NseCommanContent extends Model
+{
+    use HasFactory;
+
+    protected $fillable = [
+        'segment', 'parent_folder', 'name', 'type', 'path', 'size', 'nse_modified_at'
+    ];
+
+    protected $casts = [
+        'nse_modified_at' => 'datetime',
+    ];
+}
