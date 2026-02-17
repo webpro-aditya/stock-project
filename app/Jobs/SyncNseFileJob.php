@@ -29,35 +29,30 @@ class SyncNseFileJob
     {
         $fileRecord = NseContent::findOrFail($this->fileId);
 
-        // 1. Prepare Path
         $relativePath = "nse_cache/{$fileRecord->segment}/{$fileRecord->parent_folder}/{$fileRecord->name}";
         $absolutePath = Storage::path($relativePath);
 
-        // 2. Smart Cache Check
         $shouldDownload = true;
-        if (Storage::exists($relativePath)) {
-            $localTimestamp = Storage::lastModified($relativePath);
-            $remoteTimestamp = $fileRecord->nse_modified_at ? $fileRecord->nse_modified_at->timestamp : 0;
+        // if (Storage::exists($relativePath)) {
+        //     $localTimestamp = Storage::lastModified($relativePath);
+        //     $remoteTimestamp = $fileRecord->nse_modified_at ? $fileRecord->nse_modified_at->timestamp : 0;
 
-            // If local file is fresh enough, skip download
-            if ($localTimestamp >= $remoteTimestamp) {
-                $shouldDownload = false;
-            }
-        }
+        //     if ($localTimestamp >= $remoteTimestamp) {
+        //         $shouldDownload = false;
+        //     }
+        // }
 
-        // 3. Download from API if needed
         if ($shouldDownload) {
-            // Ensure folder exists
             $directory = dirname($relativePath);
             if (!Storage::exists($directory)) {
                 Storage::makeDirectory($directory);
             }
 
-            // Call the Service Function
+            $folderParam = ($fileRecord->parent_folder === 'root' || $fileRecord->parent_folder === 'Root' || $fileRecord->parent_folder === '') ? '' : $fileRecord->parent_folder;
             $success = $nseService->downloadFileFromApi(
                 $this->authToken,
                 $fileRecord->segment,
-                Str::studly($fileRecord->parent_folder),
+                $folderParam,
                 $fileRecord->name,
                 $absolutePath
             );
@@ -66,7 +61,6 @@ class SyncNseFileJob
                 throw new \Exception("Failed to download file from NSE API.");
             }
 
-            // Sync Timestamps
             if ($fileRecord->nse_modified_at) {
                 touch($absolutePath, $fileRecord->nse_modified_at->timestamp);
             }

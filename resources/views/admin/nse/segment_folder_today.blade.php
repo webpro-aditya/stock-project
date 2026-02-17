@@ -3,9 +3,9 @@
 @section('page_title', __('NSE Explorer - ' . Str::upper($segment)))
 
 @php
-    $folder = trim($folder ?? '', '/');
-    $parts = $folder ? explode('/', $folder) : [];
-    $path = '';
+$folder = trim($folder ?? '', '/');
+$parts = $folder ? explode('/', $folder) : [];
+$path = '';
 @endphp
 
 @section('header-actions')
@@ -29,51 +29,49 @@
             </div>
         </div>
 
-        <nav class="mb-4 text-sm font-medium text-gray-600">
+        {{--<nav class="mb-4 text-sm font-medium text-gray-600">
             <ol class="flex items-center gap-2 flex-wrap">
-
-                {{-- Root --}}
                 <li>
                     <a href="{{ route('nse.segment', ['segment' => $segment]) }}"
-                        class="hover:text-brand font-semibold">
-                        {{ Str::upper($segment) }}
-                    </a>
-                </li>
+        class="hover:text-brand font-semibold">
+        {{ Str::upper($segment) }}
+        </a>
+        </li>
 
-                @foreach($parts as $index => $part)
+        @foreach($parts as $index => $part)
 
-                @php
-                $path = $path ? $path.'/'.$part : $part;
-                @endphp
+        @php
+        $path = $path ? $path.'/'.$part : $part;
+        @endphp
 
-                <li class="text-gray-400">/</li>
+        <li class="text-gray-400">/</li>
 
-                <li>
-                    @if($index === count($parts) - 1)
+        <li>
+            @if($index === count($parts) - 1)
 
-                    {{-- Current folder --}}
-                    <span class="text-gray-900 font-semibold">
-                        {{ $part }}
-                    </span>
+            <span class="text-gray-900 font-semibold">
+                {{ $part }}
+            </span>
 
-                    @else
+            @else
 
-                    {{-- Parent folder --}}
-                    <a href="{{ route('nse.segment.today', [
+            <a href="{{ route('nse.segment.today', [
                             'segment' => $segment,
                             'folder' => $path
                         ]) }}"
-                        class="hover:text-brand font-semibold">
-                        {{ $part }}
-                    </a>
+                class="hover:text-brand font-semibold">
+                {{ $part }}
+            </a>
 
-                    @endif
-                </li>
+            @endif
+        </li>
 
-                @endforeach
+        @endforeach
 
-            </ol>
-        </nav>
+        </ol>
+        </nav>--}}
+
+
         <div class="relative overflow-x-auto" style="max-height: 60vh;">
             <table class="w-full text-sm text-left">
                 <thead class="text-xs text-gray-700 font-bold uppercase bg-gray-100 sticky top-0">
@@ -93,6 +91,7 @@
                     @php
                     $isFolder = $item->type == 'Folder';
                     $url = 'folder=' . $item->parent_folder .'/'. $item->name;
+                    $url = str_replace('root/', '', $url);
                     $isModified = $item->created_at->ne($item->nse_modified_at);
                     $currentPath = url()->current();
                     @endphp
@@ -102,7 +101,7 @@
                                 @if ($isFolder) disabled @endif>
                         </td>
                         <td scope="row" class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">
-                            <a href="{{ $currentPath }}?{{$url}}" class="flex items-center gap-3">
+                            <a href="{{ ($isFolder) ? $currentPath : '#' }}?{{($isFolder) ? $url : ''}}" class="flex items-center gap-3">
                                 <div
                                     class="w-8 h-8 flex items-center justify-center {{ $isFolder ? 'bg-indigo-100 rounded-lg' : 'bg-indigo-100 rounded-lg' }}">
                                     <i data-lucide="{{ $isFolder ? 'folder' : 'file' }}" class="w-5 h-5 {{ $isFolder ? 'text-yellow-500 fill-yellow-500/20' : 'text-indigo-600' }}"></i>
@@ -138,8 +137,8 @@
                     <tr>
                         <td colspan="5" class="text-center py-16 text-gray-500">
                             <i data-lucide="cloud-off" class="w-12 h-12 mx-auto text-gray-300"></i>
-                            <p class="mt-4 text-lg font-semibold text-gray-600">No activity found for today.</p>
-                            <p class="text-sm">Check back later or sync to fetch the latest files.</p>
+                            <p class="mt-4 text-lg font-semibold text-gray-600">No activity found.</p>
+                            <p class="text-sm">Sync to fetch the latest files.</p>
                         </td>
                     </tr>
                     @endforelse
@@ -148,7 +147,7 @@
         </div>
     </div>
 
-    <div class="text-center py-4 border-t border-gray-100">
+    {{--<div class="text-center py-4 border-t border-gray-100">
         <a href="{{ route('nse.segment.archives', ['segment' => $segment, 'folder' => $folder]) }}"
             class="inline-flex flex-col items-center gap-1 text-xs font-bold text-gray-500 uppercase tracking-wider hover:text-brand transition-colors">
             <div
@@ -157,7 +156,7 @@
             </div>
             Load Archive History
         </a>
-    </div>
+    </div>--}}
 </main>
 
 <div id="bulkActionBar"
@@ -275,7 +274,6 @@
             })
             .then(response => response.json())
             .then(data => {
-                debugger;
                 if (data.success) {
                     Toast.fire({
                         icon: 'info',

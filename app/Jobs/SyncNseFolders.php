@@ -20,7 +20,7 @@ class SyncNseFolders implements ShouldQueue, ShouldBeUnique
 
     public $timeout = 1800; // 30 minutes
     public $tries = 3;
-    public $uniqueFor = 3600;
+    public $uniqueFor = 10;
 
     private string $authToken;
     private string $segment;
@@ -30,8 +30,6 @@ class SyncNseFolders implements ShouldQueue, ShouldBeUnique
     {
         $this->authToken = $authToken;
         $this->segment   = Str::upper($segment);
-
-        // 🔥 normalize once here
         $this->folder = $this->normalizePath($folder);
     }
 
@@ -71,9 +69,14 @@ class SyncNseFolders implements ShouldQueue, ShouldBeUnique
         return trim($path, '/');
     }
 
-    /**
-     * Recursive crawler
-     */
+    private function sanitize(string $value): string
+    {
+        $value = preg_replace('/[\x00-\x1F\x7F\xA0]/u', '', $value);
+        $value = preg_replace('/\s+/', ' ', $value);
+
+        return trim($value);
+    }
+
     private function syncFolderRecursive(
         NseService $nseService,
         string $authToken,
@@ -88,9 +91,6 @@ class SyncNseFolders implements ShouldQueue, ShouldBeUnique
             'folderPath' => $currentPath ?: '(root)'
         ]);
 
-        /**
-         * Retry protects against random NSE failures.
-         */
         $apiResponse = retry(3, function () use (
             $nseService,
             $authToken,
@@ -101,15 +101,11 @@ class SyncNseFolders implements ShouldQueue, ShouldBeUnique
             return $nseService->getFolderFilesList(
                 $authToken,
                 $segment,
-                $currentPath // MUST be empty for root
+                $currentPath
             );
-
         }, 2000);
 
         if (empty($apiResponse['data']) || !is_array($apiResponse['data'])) {
-            Log::warning("Empty folder", [
-                'path' => $currentPath ?: '(root)'
-            ]);
             return;
         }
 
@@ -117,9 +113,13 @@ class SyncNseFolders implements ShouldQueue, ShouldBeUnique
 
         foreach ($apiResponse['data'] as $item) {
 
+            $name = $this->sanitize($item['name']);
+            $parent = $currentPath ?: 'root';
+
             $fullPath = ltrim(
-                ($currentPath ? $currentPath.'/' : '') .
-                $item['name'],
+                $segment . '/' .
+                    ($parent !== 'root' ? $parent . '/' : '') .
+                    $name,
                 '/'
             );
 
@@ -129,8 +129,8 @@ class SyncNseFolders implements ShouldQueue, ShouldBeUnique
 
             $rows[] = [
                 'segment' => $segment,
-                'parent_folder' => $currentPath ?: 'root',
-                'name' => $item['name'],
+                'parent_folder' => $parent,
+                'name' => $name,
                 'type' => $item['type'],
                 'path' => $fullPath,
                 'size' => $item['size'] ?? 0,
@@ -140,25 +140,21 @@ class SyncNseFolders implements ShouldQueue, ShouldBeUnique
             ];
         }
 
-        /**
-         * Bulk upsert (fast + safe)
-         */
         NseContent::upsert(
             $rows,
-            ['path'],
+            ['segment', 'parent_folder', 'name'],
             ['size', 'nse_modified_at', 'updated_at']
         );
 
-        /**
-         * Dive into subfolders
-         */
+        usleep(120000);
+
         foreach ($apiResponse['data'] as $item) {
 
             if (($item['type'] ?? null) === 'Folder') {
 
                 $nextPath = $currentPath
-                    ? $currentPath.'/'.$item['name']
-                    : $item['name'];
+                    ? $currentPath . '/' . $this->sanitize($item['name'])
+                    : $this->sanitize($item['name']);
 
                 $this->syncFolderRecursive(
                     $nseService,
