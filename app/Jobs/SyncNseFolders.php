@@ -20,7 +20,7 @@ class SyncNseFolders implements ShouldQueue, ShouldBeUnique
 
     public $timeout = 1800; // 30 minutes
     public $tries = 3;
-    public $uniqueFor = 3600;
+    public $uniqueFor = 10;
 
     private string $authToken;
     private string $segment;
@@ -30,8 +30,6 @@ class SyncNseFolders implements ShouldQueue, ShouldBeUnique
     {
         $this->authToken = $authToken;
         $this->segment   = Str::upper($segment);
-
-        // 🔥 normalize once here
         $this->folder = $this->normalizePath($folder);
     }
 
@@ -115,8 +113,8 @@ class SyncNseFolders implements ShouldQueue, ShouldBeUnique
 
         foreach ($apiResponse['data'] as $item) {
 
-            $name = strtolower($this->sanitize($item['name']));
-            $parent = strtolower($currentPath ?: 'root');
+            $name = $this->sanitize($item['name']);
+            $parent = $currentPath ?: 'root';
 
             $fullPath = ltrim(
                 $segment . '/' .

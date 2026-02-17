@@ -5,8 +5,9 @@ namespace App\Services;
 
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
-use Illuminate\Support\Facades\Session;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Session;
+use Illuminate\Support\Str;
 use Exception;
 
 class NSEService
@@ -130,29 +131,36 @@ class NSEService
         return json_decode($response, true);
     }
 
-   private function normalizeFolder(?string $folder): string
-{
-    if (!$folder) {
-        return '';
+    private function normalizeFolder(?string $folder): string
+    {
+        if (!$folder) {
+            return '';
+        }
+
+        // remove invisible unicode characters
+        $folder = preg_replace('/[\x00-\x1F\x7F\xA0]/u', '', $folder);
+
+        // collapse multiple spaces
+        $folder = preg_replace('/\s+/', ' ', $folder);
+
+        $folder = trim($folder);
+
+        if (strtolower($folder) === 'root') {
+            return '';
+        }
+
+        return trim($folder, '/');
     }
 
-    // remove invisible unicode characters
-    $folder = preg_replace('/[\x00-\x1F\x7F\xA0]/u', '', $folder);
 
-    // collapse multiple spaces
-    $folder = preg_replace('/\s+/', ' ', $folder);
-
-    $folder = trim($folder);
-
-    if (strtolower($folder) === 'root') {
-        return '';
+    function normalizeUnderscoreTitle($string)
+    {
+        return str_replace(
+            ' ',
+            '_',
+            Str::title(str_replace('_', ' ', $string))
+        );
     }
-
-    return trim($folder, '/');
-}
-
-
-
 
     public function downloadFileFromApi($authToken, $segment, $folder, $fileName, $savePath)
     {
@@ -162,20 +170,15 @@ class NSEService
             'segment'    => $segment,
             'folderPath' => '/' . $folder,
             'filename'   => $fileName
-        ]);
+        ], '', '&', PHP_QUERY_RFC3986);
 
         $url = "{$creds['base_url']}/member/file/download/{$creds['version']}?{$queryParams}";
 
         $cookieString = 'HttpOnly';
-        if (isset($creds['cookie_abck'])) {
-            $cookieString .= '; _abck=' . $creds['cookie_abck'];
-        }
-        if (isset($creds['cookie_bm_sz'])) {
-            $cookieString .= '; bm_sz=' . $creds['cookie_bm_sz'];
-        }
+        if (isset($creds['cookie_abck'])) $cookieString .= '; _abck=' . $creds['cookie_abck'];
+        if (isset($creds['cookie_bm_sz'])) $cookieString .= '; bm_sz=' . $creds['cookie_bm_sz'];
 
         $fp = fopen($savePath, 'w+');
-
         $curl = curl_init();
 
         curl_setopt_array($curl, array(
@@ -188,13 +191,14 @@ class NSEService
             CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
             CURLOPT_CUSTOMREQUEST => 'GET',
             CURLOPT_SSL_VERIFYPEER => false,
+            CURLOPT_USERAGENT => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             CURLOPT_HTTPHEADER => array(
                 'Authorization: Bearer ' . $authToken,
                 'Cookie: ' . $cookieString
             ),
         ));
 
-        $response = curl_exec($curl);
+        curl_exec($curl);
         $httpCode = curl_getinfo($curl, CURLINFO_HTTP_CODE);
         $err = curl_error($curl);
 
@@ -203,81 +207,79 @@ class NSEService
 
         if ($err) {
             Log::error("NSE cURL Error: " . $err);
+            if (file_exists($savePath)) unlink($savePath);
             return false;
         }
 
-        // ... inside downloadFileFromApi ...
-
-        // 5. Validation: Check HTTP 200 and File Size
         if ($httpCode >= 200 && $httpCode < 300 && file_exists($savePath) && filesize($savePath) > 0) {
 
-            // CHECK 1: Is it a GZIP file? (.gz)
-            if (str_ends_with($fileName, '.gz')) {
-                $response = $this->decompressGzFile($savePath);
+            $processingPath = $savePath;
+
+            if (str_ends_with($processingPath, '.gz')) {
+                $processingPath = $this->decompressGzFile($processingPath);
             }
 
-            $extension = pathinfo($fileName, PATHINFO_EXTENSION);
-            if (in_array($extension, ['lis', 'txt', 'csv'])) {
-                $response = $this->convertPipeToCsv($savePath);
+            $extension = strtolower(pathinfo($processingPath, PATHINFO_EXTENSION));
+
+            if (in_array($extension, ['lis', 'txt', 'csv', 'dat'])) {
+                $this->convertPipeToCsv($processingPath);
             }
 
-            return $response;
+            return true;
         }
 
-        Log::error("NSE Download Failed [HTTP $httpCode]: " . file_get_contents($savePath));
-
+        if (file_exists($savePath)) unlink($savePath);
+        Log::error("NSE Download Failed [HTTP $httpCode]");
         return false;
     }
 
     private function decompressGzFile($filePath)
     {
-        $bufferSize = 4096; // Read in 4KB chunks
+        $bufferSize = 4096;
+        // New filename is the original path MINUS '.gz'
         $outFileName = str_replace('.gz', '', $filePath);
 
-        // Open the GZ file for reading (binary safe)
         $file = gzopen($filePath, 'rb');
-        if (!$file) return false;
+        if (!$file) return $filePath; // Return original if failed
 
-        // Open the output file for writing
         $outFile = fopen($outFileName, 'wb');
 
-        // Stream the uncompressed data
         while (!gzeof($file)) {
             fwrite($outFile, gzread($file, $bufferSize));
         }
 
-        // Close both
         fclose($outFile);
         gzclose($file);
 
-        // Delete the original .gz file and keep the unzipped version
-        unlink($filePath);
-        rename($outFileName, $filePath); // Rename it back to original name if you want, or handle extension logic
+        // Delete the original .gz file
+        if (file_exists($filePath)) {
+            unlink($filePath);
+        }
 
-        return true;
+        // Return the new clean filename (e.g., trade.txt)
+        return $outFileName;
     }
 
     private function convertPipeToCsv($filePath)
     {
-        // 1. Open the downloaded file for reading
         $inputHandle = fopen($filePath, 'r');
         if ($inputHandle === false) return;
 
-        // 2. Create a temporary file for writing
         $tempPath = $filePath . '.tmp';
         $outputHandle = fopen($tempPath, 'w');
 
-        // 3. Read pipe-delimited, write comma-delimited
+        // Read Pipe (|), Write Comma (Standard CSV)
         while (($data = fgetcsv($inputHandle, 0, '|')) !== false) {
-            // fputcsv automatically handles quoting if data contains commas
-            fputcsv($outputHandle, $data);
+            // Filter empty rows if necessary
+            if (array_filter($data)) {
+                fputcsv($outputHandle, $data);
+            }
         }
 
-        // 4. Close handles
         fclose($inputHandle);
         fclose($outputHandle);
 
-        // 5. Replace the original file with the new CSV
+        // Swap the temp file with the original
         rename($tempPath, $filePath);
     }
 }

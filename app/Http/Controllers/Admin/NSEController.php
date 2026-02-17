@@ -107,7 +107,7 @@ class NSEController extends Controller
         SyncNseFolders::dispatch(
             $authToken,
             $segment,
-            '' // NEVER pass root
+            ''
         );
 
         return response()->json([
@@ -215,19 +215,7 @@ class NSEController extends Controller
     public function prepareDownload(Request $request, $id)
     {
         try {
-            $sessionData = Session::get('nse_auth_token');
-            $now = now()->timestamp;
-            $needsNewToken = !$sessionData || !is_array($sessionData) || ($sessionData['expires_at'] ?? 0) < $now || empty($sessionData['value']);
-
-            if ($needsNewToken) {
-                $authToken = $this->nseService->getAuthToken();
-                if ($authToken) {
-                    Session::put('nse_auth_token', ['value' => $authToken, 'expires_at' => now()->addMinutes(60)->timestamp]);
-                    Session::save();
-                }
-            } else {
-                $authToken = $sessionData['value'];
-            }
+            $authToken = $this->nseService->getAuthToken();
 
             if (!$authToken) {
                 return response()->json(['success' => false, 'message' => 'Authentication failed.'], 401);
