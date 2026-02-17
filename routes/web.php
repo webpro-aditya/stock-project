@@ -44,6 +44,7 @@ Route::group(['middleware' => 'auth'], function () {
         Route::get('/nse/download/prepare/{id}', [NseController::class, 'prepareDownload'])->name('nse.file.prepare');
         Route::get('/nse/download/serve/{id}', [NseController::class, 'serveFile'])->name('nse.file.serve');
         Route::post('/nse/sync/clear/{segment}/{folder}', [NseController::class, 'syncMemberSegment'])->name('nse.sync.clear');
+        Route::post('/nse/member/download/bulk/prepare', [NseController::class, 'prepareBulkDownload'])->name('nse.member.download.bulk.prepare');
         Route::post('/nse/common/sync/clear/{segment}/{folder}', [NSECommanController::class, 'syncMemberSegment'])->name('nse.common.sync.clear');
         Route::post('/nse/archive/sync/clear/{segment}/{folder}', [NSECommanController::class, 'clearArchiveFolderCache'])->name('nse.archive.sync.clear');
         // Route to handle the AJAX preparation (Syncs files & Creates Zip)
