@@ -41,7 +41,6 @@ class NSECommanController extends Controller
 
     public function getTodaySegmentFolder(Request $request, $segment, $folder)
     {
-       $authToken = $this->nseCommanService->getAuthToken();
         $cacheKey = "nse_sync_" . Str::slug($segment . '_' . $folder . '_today');
         $lastSynced = Cache::get($cacheKey . '_time');
         $lastSyncedFormatted = $lastSynced ? Carbon::parse($lastSynced)->format('h:i:s A') : 'Never';
@@ -64,27 +63,15 @@ class NSECommanController extends Controller
             'segment'     => $segment,
             'folder'      => $folder,
             'contents'    => $contents,
-            'authToken'   => $authToken,
             'lastSynced'  => $lastSyncedFormatted
         ]);
     }
 
     public function syncMemberSegment($segment)
     {
-        
-        $authToken = $this->nseCommanService->getAuthToken();
-
-        if (!$authToken) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Authentication token missing.'
-            ]);
-        }
-
         SyncNseCommaonFolders::dispatch(
-            $authToken,
             $segment,
-            '' // NEVER pass root
+            ''
         );
 
         return response()->json([

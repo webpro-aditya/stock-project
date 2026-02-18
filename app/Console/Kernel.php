@@ -2,18 +2,21 @@
 
 namespace App\Console;
 
+use App\Console\Commands\NSECommonSegment;
+use App\Console\Commands\NSEMemberSegment;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Console\Kernel as ConsoleKernel;
 
 class Kernel extends ConsoleKernel
 {
-     /**
+    /**
      * The Artisan commands provided by your application.
      *
      * @var array
      */
     protected $commands = [
-        //
+        NSECommonSegment::class,
+        NSEMemberSegment::class
     ];
 
     /**
@@ -21,7 +24,19 @@ class Kernel extends ConsoleKernel
      */
     protected function schedule(Schedule $schedule): void
     {
-        // $schedule->command('inspire')->hourly();
+        $schedule->command('run:nsemember')
+            // ->dailyAt('05:00')
+            ->everyMinute()
+            ->timezone('Asia/Kolkata')
+            ->withoutOverlapping()
+            ->onOneServer();
+
+        $schedule->command('run:nsecommon')
+            // ->dailyAt('06:00')
+            ->everyMinute()
+            ->timezone('Asia/Kolkata')
+            ->withoutOverlapping()
+            ->onOneServer();
     }
 
     /**
@@ -29,7 +44,7 @@ class Kernel extends ConsoleKernel
      */
     protected function commands(): void
     {
-        $this->load(__DIR__.'/Commands');
+        $this->load(__DIR__ . '/Commands');
 
         require base_path('routes/console.php');
     }

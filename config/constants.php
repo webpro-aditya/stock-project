@@ -35,5 +35,6 @@ return [
         'password' => env('NSE_PASSWORD'),
         'secret' => env('NSE_SECRET'),
         'test_mode' => env('NSE_TEST_MODE', false),
+        'cron_enabled' => env('NSE_CRON_ENABLED', true)
     ],
 ];

@@ -40,32 +40,6 @@ class NSEController extends Controller
 
     public function getTodaySegmentFolder(Request $request, $segment, $folder)
     {
-        $sessionData = Session::get('nse_auth_token');
-        $now = now()->timestamp;
-
-        $needsNewToken = !$sessionData ||
-            !is_array($sessionData) ||
-            ($sessionData['expires_at'] ?? 0) < $now ||
-            empty($sessionData['value']);
-
-        if ($needsNewToken) {
-            $authToken = $this->nseService->getAuthToken();
-
-            if ($authToken) {
-                Session::put('nse_auth_token', [
-                    'value' => $authToken,
-                    'expires_at' => now()->addMinutes(60)->timestamp
-                ]);
-                Session::save();
-            }
-        } else {
-            $authToken = $sessionData['value'];
-        }
-
-        if (!$authToken) {
-            return redirect()->route('nse.index')->withErrors('Unable to authenticate with NSE API. Please try again later.');
-        }
-
         $cacheKey = "nse_sync_" . Str::slug($segment . '_' . $folder . '_today');
         $lastSynced = Cache::get($cacheKey . '_time');
         $lastSyncedFormatted = $lastSynced ? Carbon::parse($lastSynced)->format('h:i:s A') : 'Never';
@@ -88,24 +62,13 @@ class NSEController extends Controller
             'segment'     => $segment,
             'folder'      => $folder,
             'contents'    => $contents,
-            'authToken'   => $authToken,
             'lastSynced'  => $lastSyncedFormatted
         ]);
     }
 
     public function syncMemberSegment($segment)
     {
-        $authToken = Session::get('nse_auth_token.value');
-
-        if (!$authToken) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Authentication token missing.'
-            ]);
-        }
-
         SyncNseFolders::dispatch(
-            $authToken,
             $segment,
             ''
         );
@@ -119,27 +82,7 @@ class NSEController extends Controller
 
     public function getArchiveSegmentFolder($segment, $folder)
     {
-        $sessionData = Session::get('nse_auth_token');
-        $now = now()->timestamp;
-
-        $needsNewToken = !$sessionData ||
-            !is_array($sessionData) ||
-            ($sessionData['expires_at'] ?? 0) < $now ||
-            empty($sessionData['value']);
-
-        if ($needsNewToken) {
-            $authToken = $this->nseService->getAuthToken();
-
-            if ($authToken) {
-                Session::put('nse_auth_token', [
-                    'value' => $authToken,
-                    'expires_at' => now()->addMinutes(60)->timestamp
-                ]);
-                Session::save();
-            }
-        } else {
-            $authToken = $sessionData['value'];
-        }
+        $authToken = $this->nseService->getAuthToken();
 
         if (!$authToken) {
             return redirect()->route('nse.index')->withErrors('Unable to authenticate with NSE API. Please try again later.');

@@ -5,7 +5,7 @@
             <img src="{{ asset('assets/img/logo.ico') }}" alt="Logo" class="h-8 w-8 min-w-[2rem] rounded-lg object-contain bg-white/5">
 
             <div class="logo-text">
-                <h1 class="text-slate-100 font-bold tracking-tight">SyncConsole</h1>
+                <h1 class="text-slate-100 font-bold tracking-tight">Extranet Sync</h1>
             </div>
         </div>
         <button onclick="toggleSidebar()" class="text-slate-500 hover:text-white p-1 rounded-md hover:bg-slate-800 transition-colors">

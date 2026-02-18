@@ -27,3 +27,20 @@
     </div>
 @endif
 --}}
+
+<script>
+document.addEventListener('click', function(e){
+
+    const btn = e.target.closest('[data-bs-dismiss="alert"]');
+
+    if(btn){
+        const alert = btn.closest('.alert');
+
+        alert.style.transition = "opacity .4s";
+        alert.style.opacity = "0";
+
+        setTimeout(() => alert.remove(), 400);
+    }
+
+});
+</script>

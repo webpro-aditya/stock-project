@@ -12,23 +12,22 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Str;
-use Log;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class SyncNseCommaonFolders implements ShouldQueue, ShouldBeUnique
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public $timeout = 1800; // 30 minutes
+    public $timeout = 1800;
     public $tries = 3;
-    public $uniqueFor = 1;
+    public $uniqueFor = 100;
 
-    private string $authToken;
     private string $segment;
     private string $folder;
 
-    public function __construct(string $authToken, string $segment, string $folder = '')
+    public function __construct(string $segment, string $folder = '')
     {
-        $this->authToken = $authToken;
         $this->segment   = Str::upper($segment);
 
         // 🔥 normalize once here
@@ -40,21 +39,31 @@ class SyncNseCommaonFolders implements ShouldQueue, ShouldBeUnique
         return $this->segment; // prevents duplicate crawlers
     }
 
-    public function handle(NSECommanService $NSECommanService)
+    public function handle(NSECommanService $nseCommanService)
     {
-        Log::info("Starting NSE sync", [
+        $authToken = $nseCommanService->getAuthToken();
+
+        if ( !$authToken ) {
+            Log::channel('syncron')->info("Starting NSE Member sync -- Login token Gen. Failed", [
+                'segment' => $this->segment,
+                'root' => $this->folder ?: '(root)'
+            ]);
+            return false;
+        }
+
+        Log::channel('syncron')->info("Starting NSE Common sync", [
             'segment' => $this->segment,
             'root' => $this->folder ?: '(root)'
         ]);
 
         $this->syncFolderRecursive(
-            $NSECommanService,
-            $this->authToken,
+            $nseCommanService,
+            $authToken,
             $this->segment,
             $this->folder
         );
 
-        Log::info("NSE sync completed", [
+        Log::channel('syncron')->info("NSE sync completed", [
             'segment' => $this->segment
         ]);
     }
@@ -74,52 +83,149 @@ class SyncNseCommaonFolders implements ShouldQueue, ShouldBeUnique
     /**
      * Recursive crawler
      */
+    // private function syncFolderRecursive(
+    //     NSECommanService $NSECommanService,
+    //     string $authToken,
+    //     string $segment,
+    //     string $currentPath = ''
+    // ): void {
+
+    //     $currentPath = $this->normalizePath($currentPath);
+
+    //     Log::info("Fetching folder", [
+    //         'segment' => $segment,
+    //         'folderPath' => $currentPath ?: '(root)'
+    //     ]);
+
+    //     /**
+    //      * Retry protects against random NSE failures.
+    //      */
+    //     $apiResponse = retry(3, function () use (
+    //         $NSECommanService,
+    //         $authToken,
+    //         $segment,
+    //         $currentPath
+    //     ) {
+
+    //         return $NSECommanService->getFolderFilesList(
+    //             $authToken,
+    //             $segment,
+    //             $currentPath // MUST be empty for root
+    //         );
+
+    //     }, 2000);
+
+    //     if (empty($apiResponse['data']) || !is_array($apiResponse['data'])) {
+    //         Log::warning("Empty folder", [
+    //             'path' => $currentPath ?: '(root)'
+    //         ]);
+    //         return;
+    //     }
+
+    //     $rows = [];
+
+    //     foreach ($apiResponse['data'] as $item) {
+
+    //         $fullPath = ltrim(
+    //             ($currentPath ? $currentPath.'/' : '') .
+    //             $item['name'],
+    //             '/'
+    //         );
+
+    //         $date = $item['lastUpdated']
+    //             ?? $item['lastModified']
+    //             ?? null;
+
+    //         $rows[] = [
+    //             'segment' => $segment,
+    //             'parent_folder' => $currentPath ?: 'root',
+    //             'name' => $item['name'],
+    //             'type' => $item['type'],
+    //             'path' => $fullPath,
+    //             'size' => $item['size'] ?? 0,
+    //             'nse_modified_at' => $date ? Carbon::parse($date) : null,
+    //             'created_at' => now(),
+    //             'updated_at' => now(),
+    //         ];
+    //     }
+
+    //     /**
+    //      * Bulk upsert (fast + safe)
+    //      */
+    //     NseCommanContent::upsert(
+    //         $rows,
+    //         ['path'],
+    //         ['size', 'nse_modified_at', 'updated_at']
+    //     );
+
+    //     /**
+    //      * Dive into subfolders
+    //      */
+    //     foreach ($apiResponse['data'] as $item) {
+
+    //         if (($item['type'] ?? null) === 'Folder') {
+
+    //             $nextPath = $currentPath
+    //                 ? $currentPath.'/'.$item['name']
+    //                 : $item['name'];
+
+    //             $this->syncFolderRecursive(
+    //                 $NSECommanService,
+    //                 $authToken,
+    //                 $segment,
+    //                 $nextPath
+    //             );
+    //         }
+    //     }
+    // }
+
     private function syncFolderRecursive(
-        NSECommanService $NSECommanService,
+        NSECommanService $service,
         string $authToken,
         string $segment,
         string $currentPath = ''
     ): void {
 
+        // Prevent memory blow from query logging
+        DB::connection()->disableQueryLog();
+
         $currentPath = $this->normalizePath($currentPath);
 
-        Log::info("Fetching folder", [
+        Log::channel('syncron')->info("Fetching folder", [
             'segment' => $segment,
             'folderPath' => $currentPath ?: '(root)'
         ]);
 
-        /**
-         * Retry protects against random NSE failures.
-         */
         $apiResponse = retry(3, function () use (
-            $NSECommanService,
+            $service,
             $authToken,
             $segment,
             $currentPath
         ) {
 
-            return $NSECommanService->getFolderFilesList(
+            return $service->getFolderFilesList(
                 $authToken,
                 $segment,
-                $currentPath // MUST be empty for root
+                $currentPath
             );
-
         }, 2000);
 
         if (empty($apiResponse['data']) || !is_array($apiResponse['data'])) {
-            Log::warning("Empty folder", [
+
+            Log::channel('syncron')->warning("Empty folder", [
                 'path' => $currentPath ?: '(root)'
             ]);
+
             return;
         }
 
-        $rows = [];
+        $batch = [];
 
         foreach ($apiResponse['data'] as $item) {
 
             $fullPath = ltrim(
-                ($currentPath ? $currentPath.'/' : '') .
-                $item['name'],
+                ($currentPath ? $currentPath . '/' : '') .
+                    $item['name'],
                 '/'
             );
 
@@ -127,7 +233,7 @@ class SyncNseCommaonFolders implements ShouldQueue, ShouldBeUnique
                 ?? $item['lastModified']
                 ?? null;
 
-            $rows[] = [
+            $batch[] = [
                 'segment' => $segment,
                 'parent_folder' => $currentPath ?: 'root',
                 'name' => $item['name'],
@@ -138,16 +244,32 @@ class SyncNseCommaonFolders implements ShouldQueue, ShouldBeUnique
                 'created_at' => now(),
                 'updated_at' => now(),
             ];
+
+            // 🔥 Flush batch safely
+            if (count($batch) === 500) {
+
+                NseCommanContent::upsert(
+                    $batch,
+                    ['path'],
+                    ['size', 'nse_modified_at', 'updated_at']
+                );
+
+                $batch = [];
+            }
         }
 
-        /**
-         * Bulk upsert (fast + safe)
-         */
-        NseCommanContent::upsert(
-            $rows,
-            ['path'],
-            ['size', 'nse_modified_at', 'updated_at']
-        );
+        // Insert remaining rows
+        if (!empty($batch)) {
+
+            NseCommanContent::upsert(
+                $batch,
+                ['path'],
+                ['size', 'nse_modified_at', 'updated_at']
+            );
+        }
+
+        // Rate limiting (important for NSE gateway)
+        usleep(config('nse.sleep_microseconds', 150000));
 
         /**
          * Dive into subfolders
@@ -157,11 +279,11 @@ class SyncNseCommaonFolders implements ShouldQueue, ShouldBeUnique
             if (($item['type'] ?? null) === 'Folder') {
 
                 $nextPath = $currentPath
-                    ? $currentPath.'/'.$item['name']
+                    ? $currentPath . '/' . $item['name']
                     : $item['name'];
 
                 $this->syncFolderRecursive(
-                    $NSECommanService,
+                    $service,
                     $authToken,
                     $segment,
                     $nextPath
