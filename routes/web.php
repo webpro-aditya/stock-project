@@ -42,6 +42,7 @@ Route::group(['middleware' => 'auth'], function () {
         Route::get('/files/nse/{segment}/{folder}/archives', [NSEController::class, 'getArchiveSegmentFolder'])->name('nse.segment.archives');
         // Route::get('/files/nse/{id}/download', [NSEController::class, 'downloadFile'])->name('nse.segment.downloadFile');
         Route::get('/nse/download/prepare/{id}', [NseController::class, 'prepareDownload'])->name('nse.file.prepare');
+        Route::get('/nse/common/download/prepare/{id}', [NSECommanController::class, 'prepareDownload'])->name('nse.common.file.prepare');
         Route::get('/nse/download/serve/{id}', [NseController::class, 'serveFile'])->name('nse.file.serve');
         Route::post('/nse/sync/clear/{segment}/{folder}', [NseController::class, 'syncMemberSegment'])->name('nse.sync.clear');
         Route::post('/nse/member/download/bulk/prepare', [NseController::class, 'prepareBulkDownload'])->name('nse.member.download.bulk.prepare');

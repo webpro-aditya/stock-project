@@ -161,7 +161,7 @@ class NSECommanService
             'filename'   => $fileName
         ]);
 
-        $url = "{$creds['base_url']}/member/file/download/{$creds['version']}?{$queryParams}";
+        $url = "{$creds['base_url']}/common/file/download/{$creds['version']}?{$queryParams}";
 
         $cookieString = 'HttpOnly';
         if (isset($creds['cookie_abck'])) {

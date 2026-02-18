@@ -198,7 +198,7 @@ $path = '';
             `<i data-lucide="loader-circle" class="w-4 h-4 animate-spin mr-2"></i>`;
         lucide.createIcons();
 
-        const url = "{{ route('nse.file.prepare', ['id' => ':id']) }}".replace(':id', id);
+        const url = "{{ route('nse.common.file.prepare', ['id' => ':id']) }}".replace(':id', id);
 
         fetch(url, {
                 method: 'GET',
