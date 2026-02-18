@@ -140,8 +140,8 @@
                     <tr>
                         <td colspan="5" class="text-center py-16 text-gray-500">
                             <i data-lucide="cloud-off" class="w-12 h-12 mx-auto text-gray-300"></i>
-                            <p class="mt-4 text-lg font-semibold text-gray-600">No activity found for today.</p>
-                            <p class="text-sm">Check back later or sync to fetch the latest files.</p>
+                            <p class="mt-4 text-lg font-semibold text-gray-600">No activity found.</p>
+                            <p class="text-sm">Sync to fetch the latest files.</p>
                         </td>
                     </tr>
                     @endforelse
