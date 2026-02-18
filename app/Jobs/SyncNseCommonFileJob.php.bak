@@ -25,7 +25,7 @@ class SyncNseCommonFileJob
         $this->authToken = $authToken;
     }
 
-    public function handle(NseService $nseService)
+    public function handle(NSEService $nseService)
     {
         $fileRecord = NseContent::findOrFail($this->fileId);
 

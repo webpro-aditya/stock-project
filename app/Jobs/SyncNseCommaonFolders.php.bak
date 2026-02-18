@@ -40,7 +40,7 @@ class SyncNseCommaonFolders implements ShouldQueue, ShouldBeUnique
         return $this->segment; // prevents duplicate crawlers
     }
 
-    public function handle(NseService $nseService)
+    public function handle(NSEService $nseService)
     {
         Log::info("Starting NSE sync", [
             'segment' => $this->segment,
@@ -75,7 +75,7 @@ class SyncNseCommaonFolders implements ShouldQueue, ShouldBeUnique
      * Recursive crawler
      */
     private function syncFolderRecursive(
-        NseService $nseService,
+        NSEService $nseService,
         string $authToken,
         string $segment,
         string $currentPath = ''

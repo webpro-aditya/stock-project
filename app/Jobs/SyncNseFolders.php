@@ -3,7 +3,7 @@
 namespace App\Jobs;
 
 use App\Models\NseContent;
-use App\Services\NseService;
+use App\Services\NSEService;
 use Carbon\Carbon;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -37,7 +37,7 @@ class SyncNseFolders implements ShouldQueue, ShouldBeUnique
         return $this->segment;
     }
 
-    public function handle(NseService $nseService)
+    public function handle(NSEService $nseService)
     {
         $authToken = $nseService->getAuthToken();
 
@@ -87,7 +87,7 @@ class SyncNseFolders implements ShouldQueue, ShouldBeUnique
     }
 
     // private function syncFolderRecursive(
-    //     NseService $nseService,
+    //     NSEService $nseService,
     //     string $authToken,
     //     string $segment,
     //     string $currentPath = ''
@@ -176,7 +176,7 @@ class SyncNseFolders implements ShouldQueue, ShouldBeUnique
     // }
 
     private function syncFolderRecursive(
-        NseService $nseService,
+        NSEService $nseService,
         string $authToken,
         string $segment,
         string $currentPath = ''

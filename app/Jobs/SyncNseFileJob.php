@@ -8,7 +8,7 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use App\Models\NseContent;
-use App\Services\NseService; // Ensure you import your service
+use App\Services\NSEService; // Ensure you import your service
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
@@ -25,7 +25,7 @@ class SyncNseFileJob
         $this->authToken = $authToken;
     }
 
-    public function handle(NseService $nseService)
+    public function handle(NSEService $nseService)
     {
         $fileRecord = NseContent::findOrFail($this->fileId);
 
