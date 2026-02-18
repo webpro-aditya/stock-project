@@ -35,6 +35,8 @@ class Kernel extends ConsoleKernel
             ->timezone('Asia/Kolkata')
             ->withoutOverlapping()
             ->onOneServer();
+
+        $schedule->command('telescope:prune')->daily();
     }
 
     /**
