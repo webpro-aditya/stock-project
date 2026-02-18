@@ -44,7 +44,7 @@ class NSECommanController extends Controller
         $cacheKey = "nse_sync_" . Str::slug($segment . '_' . $folder . '_today');
         $lastSynced = Cache::get($cacheKey . '_time');
         $lastSyncedFormatted = $lastSynced ? Carbon::parse($lastSynced)->format('h:i:s A') : 'Never';
-        
+
         $contents = NseCommanContent::where('segment', Str::upper($segment))
             ->where('parent_folder', $folder)
             ->orderBy('type', 'desc')
@@ -158,19 +158,7 @@ class NSECommanController extends Controller
     public function prepareDownload(Request $request, $id)
     {
         try {
-            $sessionData = Session::get('nse_auth_token');
-            $now = now()->timestamp;
-            $needsNewToken = !$sessionData || !is_array($sessionData) || ($sessionData['expires_at'] ?? 0) < $now || empty($sessionData['value']);
-
-            if ($needsNewToken) {
-                $authToken = $this->nseCommanService->getAuthToken();
-                if ($authToken) {
-                    Session::put('nse_auth_token', ['value' => $authToken, 'expires_at' => now()->addMinutes(60)->timestamp]);
-                    Session::save();
-                }
-            } else {
-                $authToken = $sessionData['value'];
-            }
+            $authToken = $this->nseCommanService->getAuthToken();
 
             if (!$authToken) {
                 return response()->json(['success' => false, 'message' => 'Authentication failed.'], 401);
@@ -201,19 +189,7 @@ class NSECommanController extends Controller
     public function prepareBulkDownload(Request $request)
     {
         try {
-            $sessionData = Session::get('nse_auth_token');
-            $now = now()->timestamp;
-            $needsNewToken = !$sessionData || !is_array($sessionData) || ($sessionData['expires_at'] ?? 0) < $now || empty($sessionData['value']);
-
-            if ($needsNewToken) {
-                $authToken = $this->nseCommanService->getAuthToken();
-                if ($authToken) {
-                    Session::put('nse_auth_token', ['value' => $authToken, 'expires_at' => now()->addMinutes(60)->timestamp]);
-                    Session::save();
-                }
-            } else {
-                $authToken = $sessionData['value'];
-            }
+            $authToken = $this->nseCommanService->getAuthToken();
 
             if (!$authToken) {
                 return response()->json(['success' => false, 'message' => 'Authentication failed.'], 401);
