@@ -29,51 +29,53 @@
             </div>
         </div>
 
-        <nav class="mb-4 text-sm font-medium text-gray-600">
-            <ol class="flex items-center gap-2 flex-wrap">
+          <nav class="p-2 text-sm font-medium text-gray-600">
+    <ol class="flex items-center gap-2 flex-wrap">
 
-                {{-- Root --}}
-                <li>
-                    <a href="{{ route('nse.segment', ['segment' => $segment]) }}"
-                        class="hover:text-brand font-semibold">
-                        {{ Str::upper($segment) }}
-                    </a>
-                </li>
+        {{-- Segment Link --}}
+        <li>
+            <a href="{{ route('nse.common.segment.folder.today', [
+                        'segment' => $segment,
+                        'folder' => 'root'
+                    ]) }}"
+               class="hover:text-brand font-semibold">
+                {{ Str::upper($segment) }}
+            </a>
+        </li>
 
-                @foreach($parts as $index => $part)
+        @php
+            $rawFolderParam = request()->query('folder');
 
-                @php
-                $path = $path ? $path.'/'.$part : $part;
-                @endphp
+            // Split folders
+            $folderParts = array_filter(explode('/', $rawFolderParam));
 
-                <li class="text-gray-400">/</li>
+            // ❌ Remove "root" from breadcrumb display
+            $folderParts = array_filter($folderParts, fn($p) => $p !== 'root');
 
-                <li>
-                    @if($index === count($parts) - 1)
+            $accumulatedPath = '';
+        @endphp
 
-                    {{-- Current folder --}}
-                    <span class="text-gray-900 font-semibold">
-                        {{ $part }}
-                    </span>
+        @foreach($folderParts as $part)
+            @php
+                $accumulatedPath .= ($accumulatedPath ? '/' : '') . $part;
+            @endphp
 
-                    @else
+            <li class="text-gray-400">/</li>
 
-                    {{-- Parent folder --}}
-                    <a href="{{ route('nse.segment.today', [
+            <li>
+                <a href="{{ route('nse.common.segment.folder.today', [
                             'segment' => $segment,
-                            'folder' => $path
-                        ]) }}"
-                        class="hover:text-brand font-semibold">
-                        {{ $part }}
-                    </a>
+                            'folder' => 'root'
+                        ]) }}?folder={{ $accumulatedPath }}"
+                   class="hover:text-brand font-semibold">
+                    {{ $part }}
+                </a>
+            </li>
+        @endforeach
 
-                    @endif
-                </li>
+    </ol>
+</nav>
 
-                @endforeach
-
-            </ol>
-        </nav>
         <div class="relative overflow-x-auto" style="max-height: 60vh;">
             <table class="w-full text-sm text-left">
                 <thead class="text-xs text-gray-700 font-bold uppercase bg-gray-100 sticky top-0">
@@ -200,7 +202,7 @@
             `<i data-lucide="loader-circle" class="w-4 h-4 animate-spin mr-2"></i>`;
         lucide.createIcons();
 
-        const url = "{{ route('nse.file.prepare', ['id' => ':id']) }}".replace(':id', id);
+        const url = "{{ route('nse.common.file.prepare', ['id' => ':id']) }}".replace(':id', id);
 
         fetch(url, {
                 method: 'GET',
@@ -362,7 +364,7 @@
         btn.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin mr-2"></i> Zipping...';
         lucide.createIcons();
 
-        fetch("{{ route('nse.download.bulk.prepare') }}", {
+        fetch("{{ route('nse.common.download.bulk.prepare') }}", {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

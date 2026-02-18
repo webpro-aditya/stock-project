@@ -44,15 +44,17 @@ Route::group(['middleware' => 'auth'], function () {
         Route::get('/nse/download/prepare/{id}', [NseController::class, 'prepareDownload'])->name('nse.file.prepare');
         Route::get('/nse/common/download/prepare/{id}', [NSECommanController::class, 'prepareDownload'])->name('nse.common.file.prepare');
         Route::get('/nse/download/serve/{id}', [NseController::class, 'serveFile'])->name('nse.file.serve');
+        Route::get('/nse/common/download/serve/{id}', [NSECommanController::class, 'serveFile'])->name('nse.common.file.serve');
         Route::post('/nse/sync/clear/{segment}/{folder}', [NseController::class, 'syncMemberSegment'])->name('nse.sync.clear');
         Route::post('/nse/member/download/bulk/prepare', [NseController::class, 'prepareBulkDownload'])->name('nse.member.download.bulk.prepare');
         Route::post('/nse/common/sync/clear/{segment}/{folder}', [NSECommanController::class, 'syncMemberSegment'])->name('nse.common.sync.clear');
         Route::post('/nse/archive/sync/clear/{segment}/{folder}', [NSECommanController::class, 'clearArchiveFolderCache'])->name('nse.archive.sync.clear');
         // Route to handle the AJAX preparation (Syncs files & Creates Zip)
-        Route::post('/nse/download/bulk/prepare', [NSECommanController::class, 'prepareBulkDownload'])->name('nse.download.bulk.prepare');
+        Route::post('/nse/common/download/bulk/prepare', [NSECommanController::class, 'prepareBulkDownload'])->name('nse.common.download.bulk.prepare');
 
         // Route to serve the generated Zip
-        Route::get('/nse/download/bulk/serve/{filename}', [NSECommanController::class, 'serveBulkZip'])->name('nse.bulk.serve');
+        Route::get('/nse/download/bulk/serve/{filename}', [NSEController::class, 'serveBulkZip'])->name('nse.bulk.serve');
+        Route::get('/nse/common/download/bulk/serve/{filename}', [NSECommanController::class, 'serveBulkZip'])->name('nse.common.bulk.serve');
 
         // BSE
         Route::get('/files/bse', [BSEController::class, 'index'])->name('bse.index');

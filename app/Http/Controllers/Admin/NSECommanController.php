@@ -189,10 +189,9 @@ class NSECommanController extends Controller
                 return response()->json(['success' => false, 'message' => 'Authentication failed.'], 401);
             }
             SyncNseCommonFileJob::dispatchSync($id, $authToken);
-
             return response()->json([
                 'success' => true,
-                'url' => route('nse.file.serve', ['id' => $id])
+                'url' => route('nse.common.file.serve', ['id' => $id])
             ]);
         } catch (\Exception $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
@@ -277,7 +276,7 @@ class NSECommanController extends Controller
 
             return response()->json([
                 'success' => true,
-                'url' => route('nse.bulk.serve', ['filename' => $zipFileName])
+                'url' => route('nse.common.bulk.serve', ['filename' => $zipFileName])
             ]);
         } catch (\Exception $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
