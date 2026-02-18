@@ -29,47 +29,45 @@ $path = '';
             </div>
         </div>
 
-        {{--<nav class="mb-4 text-sm font-medium text-gray-600">
+        <nav class="p-2 text-sm font-medium text-gray-600">
             <ol class="flex items-center gap-2 flex-wrap">
                 <li>
-                    <a href="{{ route('nse.segment', ['segment' => $segment]) }}"
-        class="hover:text-brand font-semibold">
-        {{ Str::upper($segment) }}
-        </a>
-        </li>
+                    <a href="{{ route('nse.segment.folder.today', [
+                                'segment' => $segment,
+                                'folder' => 'root'
+                            ]) }}"
+                        class="hover:text-brand font-semibold">
+                        {{ Str::upper($segment) }}
+                    </a>
+                </li>
 
-        @foreach($parts as $index => $part)
+                @php
+                    $rawFolderParam = request()->query('folder');
+                    
+                    $folderParts = array_filter(explode('/', $rawFolderParam));
+                    
+                    $accumulatedPath = '';
+                @endphp
 
-        @php
-        $path = $path ? $path.'/'.$part : $part;
-        @endphp
+                @foreach($folderParts as $part)
+                    @php
+                        $accumulatedPath .= ($accumulatedPath ? '/' : '') . $part;
+                    @endphp
 
-        <li class="text-gray-400">/</li>
+                    <li class="text-gray-400">/</li>
 
-        <li>
-            @if($index === count($parts) - 1)
-
-            <span class="text-gray-900 font-semibold">
-                {{ $part }}
-            </span>
-
-            @else
-
-            <a href="{{ route('nse.segment.today', [
-                            'segment' => $segment,
-                            'folder' => $path
-                        ]) }}"
-                class="hover:text-brand font-semibold">
-                {{ $part }}
-            </a>
-
-            @endif
-        </li>
-
-        @endforeach
-
-        </ol>
-        </nav>--}}
+                    <li>
+                        <a href="{{ route('nse.segment.folder.today', [
+                                    'segment' => $segment,
+                                    'folder' => 'root' // Base route param stays 'root'
+                                ]) }}?folder={{ $accumulatedPath }}"
+                        class="hover:text-brand font-semibold">
+                            {{ $part }}
+                        </a>
+                    </li>
+                @endforeach
+            </ol>
+        </nav>
 
 
         <div class="relative overflow-x-auto" style="max-height: 60vh;">
@@ -97,8 +95,9 @@ $path = '';
                     @endphp
                     <tr class="bg-white border-b border-gray-200 hover:bg-gray-50">
                         <td class="p-4">
-                            <input type="checkbox" value="{{ $item->id }}" onchange="checkSelection()" class="row-selector w-4 h-4 custom-checkbox rounded border-gray-300"
-                                @if ($isFolder) disabled @endif>
+                            @if (!$isFolder)
+                                <input type="checkbox" value="{{ $item->id }}" onchange="checkSelection()" class="row-selector w-4 h-4 custom-checkbox rounded border-gray-300">
+                            @endif
                         </td>
                         <td scope="row" class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">
                             <a href="{{ ($isFolder) ? $currentPath : '#' }}?{{($isFolder) ? $url : ''}}" class="flex items-center gap-3">
