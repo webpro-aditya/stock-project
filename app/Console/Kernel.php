@@ -25,15 +25,13 @@ class Kernel extends ConsoleKernel
     protected function schedule(Schedule $schedule): void
     {
         $schedule->command('run:nsemember')
-            // ->dailyAt('05:00')
-            ->everyMinute()
+            ->dailyAt('05:00')
             ->timezone('Asia/Kolkata')
             ->withoutOverlapping()
             ->onOneServer();
 
         $schedule->command('run:nsecommon')
-            // ->dailyAt('06:00')
-            ->everyMinute()
+            ->dailyAt('06:00')
             ->timezone('Asia/Kolkata')
             ->withoutOverlapping()
             ->onOneServer();
