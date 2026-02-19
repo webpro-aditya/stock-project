@@ -93,6 +93,7 @@
                     @php
                     $isFolder = $item->type == 'Folder';
                     $url = 'folder=' . $item->parent_folder .'/'. $item->name;
+                    $url = str_replace('root/', '', $url);
                     $isModified = $item->created_at->ne($item->nse_modified_at);
                     $currentPath = url()->current();
                     @endphp
