@@ -35,7 +35,7 @@ class AdminController extends Controller
         if (Auth::attempt($validator)) {
             $request->session()->regenerate();
 
-            return redirect()->route('dashboard.index');
+            return redirect()->route('nse.segment.folder.today', ['segment' => 'CM', 'folder' => 'root']);
         }
       } catch (Exception $e) {
         return back()->with('error', $e->getMessage());
