@@ -57,9 +57,9 @@ Route::group(['middleware' => 'auth'], function () {
         Route::get('/nse/common/download/bulk/serve/{filename}', [NSECommanController::class, 'serveBulkZip'])->name('nse.common.bulk.serve');
 
         // BSE
-        Route::get('/files/bse', [BSEController::class, 'index'])->name('bse.index');
-        Route::get('/files/bse/{segment}', [BSEController::class, 'index'])->name('bse.segment');
-        Route::get('/files/bse/{segment}/{folder}/today', [BSEController::class, 'getTodaySegmentFolder'])->name('bse.segment.folder.today');
+        // Route::get('/files/bse', [BSEController::class, 'index'])->name('bse.index');
+        // Route::get('/files/bse/{segment}', [BSEController::class, 'index'])->name('bse.segment');
+        // Route::get('/files/bse/{segment}/{folder}/today', [BSEController::class, 'getTodaySegmentFolder'])->name('bse.segment.folder.today');
 
     });
 });

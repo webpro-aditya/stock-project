@@ -10,10 +10,11 @@ class NseContent extends Model
     use HasFactory;
 
     protected $fillable = [
-        'segment', 'parent_folder', 'name', 'type', 'path', 'size', 'nse_modified_at'
+        'segment', 'parent_folder', 'name', 'type', 'path', 'size', 'nse_created_at', 'nse_modified_at'
     ];
 
     protected $casts = [
-        'nse_modified_at' => 'datetime',
+        'nse_created_at' => 'datetime',
+        'nse_modified_at' => 'datetime'
     ];
 }

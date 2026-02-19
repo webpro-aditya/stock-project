@@ -40,27 +40,28 @@ class NSEController extends Controller
 
     public function getTodaySegmentFolder(Request $request, $segment, $folder)
     {
+        $segment = Str::upper($segment);
+
         $cacheKey = "nse_sync_" . Str::slug($segment . '_' . $folder . '_today');
         $lastSynced = Cache::get($cacheKey . '_time');
-        $lastSyncedFormatted = $lastSynced ? Carbon::parse($lastSynced)->format('h:i:s A') : 'Never';
-        
-        $contents = NseContent::where('segment', Str::upper($segment))
-            ->where('parent_folder', 'root')
-            ->orderBy('type', 'desc')
-            ->orderBy('nse_modified_at', 'desc')
-            ->get();
+        $lastSyncedFormatted = $lastSynced
+            ? Carbon::parse($lastSynced)->format('h:i:s A')
+            : 'Never';
 
-        if ($request->has('folder') && $request->query('folder') !== $folder) {
-            $contents = NseContent::where('segment', Str::upper($segment))
-                ->where('parent_folder', $request->query('folder'))
-                ->orderBy('type', 'desc')
-                ->orderBy('nse_modified_at', 'desc')
-                ->get();
-        }
+        $currentFolder = $request->query('folder') ?? 'root';
+
+        $contents = NseContent::where('segment', $segment)
+            ->where('parent_folder', $currentFolder)
+            ->where(function ($query) {
+                $query->whereDate('nse_created_at', Carbon::today());
+            })
+            ->orderByDesc('type') // Folder first
+            ->orderByDesc('nse_modified_at') // Latest files first
+            ->get();
 
         return view('admin.nse.segment_folder_today', [
             'segment'     => $segment,
-            'folder'      => $folder,
+            'folder'      => $currentFolder,
             'contents'    => $contents,
             'lastSynced'  => $lastSyncedFormatted
         ]);
@@ -190,7 +191,7 @@ class NSEController extends Controller
     public function prepareBulkDownload(Request $request)
     {
         try {
-            
+
             $authToken = $this->nseService->getAuthToken();
             $ids = $request->input('ids', []);
 

@@ -96,13 +96,16 @@ $path = '';
                 </thead>
                 <tbody>
                     @forelse($contents as $item)
-                    @php
-                    $isFolder = $item->type == 'Folder';
-                    $url = 'folder=' . $item->parent_folder .'/'. $item->name;
-                    $url = str_replace('root/', '', $url);
-                    $isModified = $item->created_at->ne($item->nse_modified_at);
-                    $currentPath = url()->current();
-                    @endphp
+                        @php
+                            $isFolder = $item->type == 'Folder';
+                            $url = 'folder=' . $item->parent_folder .'/'. $item->name;
+                            $url = str_replace('root/', '', $url);
+                            $isModified = false;
+                            if ($item->nse_created_at && $item->nse_modified_at) {
+                                $isModified = $item->nse_created_at->ne($item->nse_modified_at);
+                            }
+                            $currentPath = url()->current();
+                        @endphp
                     <tr class="bg-white border-b border-gray-200 hover:bg-gray-50">
                         <td class="p-4">
                             @if (!$isFolder)
@@ -119,17 +122,17 @@ $path = '';
                             </a>
                         </td>
                         <td class="px-6 py-4 text-gray-700 font-medium">
-                            {{ $item->nse_modified_at ? $item->nse_modified_at->format('d M H:i') : '' }}
+                            {{ $item->nse_created_at ? $item->nse_created_at->format('d M h:i a') : '' }}
                         </td>
                         <td class="px-6 py-4 text-gray-700 font-medium">
                             <div class="flex flex-col">
-                                <span>{{ $item->nse_modified_at ? $item->nse_modified_at->format('d M H:i') : '' }}</span>
-                                {{--@if ($isModified)
+                                <span>{{ $item->nse_modified_at ? $item->nse_modified_at->format('d M h:i a') : '' }}</span>
+                                @if ($isModified)
                                 <span class="flex items-center gap-1.5 text-xs text-amber-600 font-semibold mt-0.5">
                                     <i data-lucide="alert-circle" class="w-3.5 h-3.5"></i>
                                     Modified
                                 </span>
-                                @endif--}}
+                                @endif
                             </div>
                         </td>
                         <td class="px-6 py-4 text-right">
@@ -156,7 +159,7 @@ $path = '';
         </div>
     </div>
 
-    {{--<div class="text-center py-4 border-t border-gray-100">
+    <div class="text-center py-4 border-t border-gray-100">
         <a href="{{ route('nse.segment.archives', ['segment' => $segment, 'folder' => $folder]) }}"
             class="inline-flex flex-col items-center gap-1 text-xs font-bold text-gray-500 uppercase tracking-wider hover:text-brand transition-colors">
             <div
@@ -165,7 +168,7 @@ $path = '';
             </div>
             Load Archive History
         </a>
-    </div>--}}
+    </div>
 </main>
 
 <div id="bulkActionBar"
@@ -286,9 +289,9 @@ $path = '';
                 if (data.success) {
                     Toast.fire({
                         icon: 'info',
-                        title: 'Refreshing the page...'
+                        title: 'Sync started...'
                     });
-                    setTimeout(() => window.location.reload(), 1000);
+                    // setTimeout(() => window.location.reload(), 1000);
                 } else {
                     Toast.fire({
                         icon: 'error',
