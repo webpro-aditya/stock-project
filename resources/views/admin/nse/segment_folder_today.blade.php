@@ -27,8 +27,6 @@ $path = '';
 
 @section('content')
 <main class="flex-1 p-6 bg-gray-50">
-
-
     <nav class="p-2 text-sm font-medium text-gray-600">
         <ol class="flex items-center gap-2 flex-wrap">
             <li>
@@ -125,13 +123,13 @@ $path = '';
                         </td>
                         <td class="px-6 py-4 text-gray-700 font-medium">
                             <div class="flex flex-col">
-                                <span>{{ $item->updated_at ? $item->updated_at->format('d M H:i') : '' }}</span>
-                                @if ($isModified)
+                                <span>{{ $item->nse_modified_at ? $item->nse_modified_at->format('d M H:i') : '' }}</span>
+                                {{--@if ($isModified)
                                 <span class="flex items-center gap-1.5 text-xs text-amber-600 font-semibold mt-0.5">
                                     <i data-lucide="alert-circle" class="w-3.5 h-3.5"></i>
                                     Modified
                                 </span>
-                                @endif
+                                @endif--}}
                             </div>
                         </td>
                         <td class="px-6 py-4 text-right">

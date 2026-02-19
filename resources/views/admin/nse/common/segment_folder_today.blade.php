@@ -120,13 +120,13 @@ $path = '';
                         </td>
                         <td class="px-6 py-4 text-gray-700 font-medium">
                             <div class="flex flex-col">
-                                <span>{{ $item->updated_at ? $item->updated_at->format('d M H:i') : '' }}</span>
-                                @if ($isModified)
+                                <span>{{ $item->nse_modified_at ? $item->nse_modified_at->format('d M H:i') : '' }}</span>
+                                {{--@if ($isModified)
                                 <span class="flex items-center gap-1.5 text-xs text-amber-600 font-semibold mt-0.5">
                                     <i data-lucide="alert-circle" class="w-3.5 h-3.5"></i>
                                     Modified
                                 </span>
-                                @endif
+                                @endif--}}
                             </div>
                         </td>
                         <td class="px-6 py-4 text-right">
