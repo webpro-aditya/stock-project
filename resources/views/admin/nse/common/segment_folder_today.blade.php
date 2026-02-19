@@ -149,17 +149,6 @@
             </table>
         </div>
     </div>
-
-    <div class="text-center py-4 border-t border-gray-100">
-        <a href="{{ route('nse.segment.archives', ['segment' => $segment, 'folder' => $folder]) }}"
-            class="inline-flex flex-col items-center gap-1 text-xs font-bold text-gray-500 uppercase tracking-wider hover:text-brand transition-colors">
-            <div
-                class="w-10 h-10 flex items-center justify-center rounded-full bg-gray-200 group-hover:bg-brand-light shadow-sm border border-gray-200 transition-colors">
-                <i data-lucide="arrow-up" class="w-5 h-5"></i>
-            </div>
-            Load Archive History
-        </a>
-    </div>
 </main>
 
 <div id="bulkActionBar"
