@@ -8,6 +8,10 @@
     $path = '';
 @endphp
 
+@section('header-title')
+<span>NSE Common Segment</span>
+@endsection
+
 @section('header-actions')
 <div class="text-right">
     <button onclick="syncNow('{{ $segment }}', '{{ $folder }}')"
@@ -31,49 +35,43 @@
             </div>
         </div>
 
-        <nav class="mb-4 text-sm font-medium text-gray-600">
+        <nav class="p-2 text-sm font-medium text-gray-600">
             <ol class="flex items-center gap-2 flex-wrap">
-
-                {{-- Root --}}
                 <li>
-                    <a href="{{ route('nse.segment', ['segment' => $segment]) }}"
+                    <a href="{{ route('nse.segment.folder.today', [
+                                'segment' => $segment,
+                                'folder' => 'root'
+                            ]) }}"
                         class="hover:text-brand font-semibold">
                         {{ Str::upper($segment) }}
                     </a>
                 </li>
 
-                @foreach($parts as $index => $part)
-
                 @php
-                $path = $path ? $path.'/'.$part : $part;
+                    $rawFolderParam = request()->query('folder');
+                    
+                    $folderParts = array_filter(explode('/', $rawFolderParam));
+                    
+                    $accumulatedPath = '';
                 @endphp
 
-                <li class="text-gray-400">/</li>
+                @foreach($folderParts as $part)
+                    @php
+                        $accumulatedPath .= ($accumulatedPath ? '/' : '') . $part;
+                    @endphp
 
-                <li>
-                    @if($index === count($parts) - 1)
+                    <li class="text-gray-400">/</li>
 
-                    {{-- Current folder --}}
-                    <span class="text-gray-900 font-semibold">
-                        {{ $part }}
-                    </span>
-
-                    @else
-
-                    {{-- Parent folder --}}
-                    <a href="{{ route('nse.segment.today', [
-                            'segment' => $segment,
-                            'folder' => $path
-                        ]) }}"
+                    <li>
+                        <a href="{{ route('nse.segment.folder.today', [
+                                    'segment' => $segment,
+                                    'folder' => 'root' // Base route param stays 'root'
+                                ]) }}?folder={{ $accumulatedPath }}"
                         class="hover:text-brand font-semibold">
-                        {{ $part }}
-                    </a>
-
-                    @endif
-                </li>
-
+                            {{ $part }}
+                        </a>
+                    </li>
                 @endforeach
-
             </ol>
         </nav>
         <div class="relative overflow-x-auto" style="max-height: 60vh;">

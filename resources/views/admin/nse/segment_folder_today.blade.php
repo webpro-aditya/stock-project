@@ -8,6 +8,10 @@ $parts = $folder ? explode('/', $folder) : [];
 $path = '';
 @endphp
 
+@section('header-title')
+<span>NSE Member Segment</span>
+@endsection
+
 @section('header-actions')
 <div class="text-right">
     <button onclick="syncNow('{{ $segment }}', '{{ $folder }}')"
