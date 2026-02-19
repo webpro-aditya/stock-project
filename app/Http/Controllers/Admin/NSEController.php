@@ -47,14 +47,14 @@ class NSEController extends Controller
         $contents = NseContent::where('segment', Str::upper($segment))
             ->where('parent_folder', 'root')
             ->orderBy('type', 'desc')
-            ->orderBy('nse_modified_at', 'desc')
+            ->orderBy('updated_at', 'desc')
             ->get();
 
         if ($request->has('folder') && $request->query('folder') !== $folder) {
             $contents = NseContent::where('segment', Str::upper($segment))
                 ->where('parent_folder', $request->query('folder'))
                 ->orderBy('type', 'desc')
-                ->orderBy('nse_modified_at', 'desc')
+                ->orderBy('updated_at', 'desc')
                 ->get();
         }
 

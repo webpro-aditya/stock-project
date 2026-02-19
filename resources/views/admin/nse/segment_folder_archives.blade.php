@@ -303,7 +303,7 @@
         btn.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin mr-2"></i> Zipping...';
         lucide.createIcons(); 
 
-        fetch("{{ route('nse.download.bulk.prepare') }}", {
+        fetch("{{ route('nse.member.download.bulk.prepare') }}", {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

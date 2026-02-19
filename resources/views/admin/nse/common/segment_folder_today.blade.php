@@ -3,9 +3,9 @@
 @section('page_title', __('NSE Explorer - ' . Str::upper($segment)))
 
 @php
-    $folder = trim($folder ?? '', '/');
-    $parts = $folder ? explode('/', $folder) : [];
-    $path = '';
+$folder = trim($folder ?? '', '/');
+$parts = $folder ? explode('/', $folder) : [];
+$path = '';
 @endphp
 
 @section('header-title')
@@ -20,13 +20,56 @@
         SYNC NOW
     </button>
     @if ($lastSynced && $lastSynced != 'Never')
-        <div class="text-xs text-gray-500 mt-1">Last synced: {{ $lastSynced }}</div>
+    <div class="text-xs text-gray-500 mt-1">Last synced: {{ $lastSynced }}</div>
     @endif
 </div>
 @endsection
 
 @section('content')
 <main class="flex-1 p-6 bg-gray-50">
+    <nav class="p-2 text-sm font-medium text-gray-600">
+        <ol class="flex items-center gap-2 flex-wrap">
+            <li>
+                NSE Common Segment
+            </li>
+            <li class="text-gray-400">/</li>
+            <li>
+                <a href="{{ route('nse.segment.folder.today', [
+                                'segment' => $segment,
+                                'folder' => 'root'
+                            ]) }}"
+                    class="hover:text-brand font-semibold">
+                    {{ Str::upper($segment) }}
+                </a>
+            </li>
+
+            @php
+            $rawFolderParam = request()->query('folder');
+
+            $folderParts = array_filter(explode('/', $rawFolderParam));
+
+            $accumulatedPath = '';
+            @endphp
+
+            @foreach($folderParts as $part)
+            @php
+            $accumulatedPath .= ($accumulatedPath ? '/' : '') . $part;
+            @endphp
+
+            <li class="text-gray-400">/</li>
+
+            <li>
+                <a href="{{ route('nse.segment.folder.today', [
+                                    'segment' => $segment,
+                                    'folder' => 'root' // Base route param stays 'root'
+                                ]) }}?folder={{ $accumulatedPath }}"
+                    class="hover:text-brand font-semibold">
+                    {{ $part }}
+                </a>
+            </li>
+            @endforeach
+        </ol>
+    </nav>
     <div class="bg-white rounded-lg shadow-sm">
         <div class="px-6 py-3 border-b border-gray-200">
             <div class="flex items-center gap-3 text-lg font-bold text-gray-900">
@@ -35,45 +78,6 @@
             </div>
         </div>
 
-        <nav class="p-2 text-sm font-medium text-gray-600">
-            <ol class="flex items-center gap-2 flex-wrap">
-                <li>
-                    <a href="{{ route('nse.segment.folder.today', [
-                                'segment' => $segment,
-                                'folder' => 'root'
-                            ]) }}"
-                        class="hover:text-brand font-semibold">
-                        {{ Str::upper($segment) }}
-                    </a>
-                </li>
-
-                @php
-                    $rawFolderParam = request()->query('folder');
-                    
-                    $folderParts = array_filter(explode('/', $rawFolderParam));
-                    
-                    $accumulatedPath = '';
-                @endphp
-
-                @foreach($folderParts as $part)
-                    @php
-                        $accumulatedPath .= ($accumulatedPath ? '/' : '') . $part;
-                    @endphp
-
-                    <li class="text-gray-400">/</li>
-
-                    <li>
-                        <a href="{{ route('nse.segment.folder.today', [
-                                    'segment' => $segment,
-                                    'folder' => 'root' // Base route param stays 'root'
-                                ]) }}?folder={{ $accumulatedPath }}"
-                        class="hover:text-brand font-semibold">
-                            {{ $part }}
-                        </a>
-                    </li>
-                @endforeach
-            </ol>
-        </nav>
         <div class="relative overflow-x-auto" style="max-height: 60vh;">
             <table class="w-full text-sm text-left">
                 <thead class="text-xs text-gray-700 font-bold uppercase bg-gray-100 sticky top-0">
@@ -112,11 +116,11 @@
                             </a>
                         </td>
                         <td class="px-6 py-4 text-gray-700 font-medium">
-                            {{ $item->created_at ? $item->created_at->format('d M H:i') : '' }}
+                            {{ $item->nse_modified_at ? $item->nse_modified_at->format('d M H:i') : '' }}
                         </td>
                         <td class="px-6 py-4 text-gray-700 font-medium">
                             <div class="flex flex-col">
-                                <span>{{ $item->nse_modified_at ? $item->nse_modified_at->format('d M H:i') : '' }}</span>
+                                <span>{{ $item->updated_at ? $item->updated_at->format('d M H:i') : '' }}</span>
                                 @if ($isModified)
                                 <span class="flex items-center gap-1.5 text-xs text-amber-600 font-semibold mt-0.5">
                                     <i data-lucide="alert-circle" class="w-3.5 h-3.5"></i>
