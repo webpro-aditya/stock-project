@@ -131,27 +131,28 @@ class NSECommanService
         return json_decode($response, true);
     }
 
-   private function normalizeFolder(?string $folder): string
-{
-    if (!$folder) {
-        return '';
+    private function normalizeFolder(?string $folder): string
+    {
+        if (!$folder) {
+            return '';
+        }
+
+        // remove invisible unicode characters
+        $folder = preg_replace('/[\x00-\x1F\x7F\xA0]/u', '', $folder);
+
+        // collapse multiple spaces
+        $folder = preg_replace('/\s+/', ' ', $folder);
+
+        $folder = trim($folder);
+
+        if (strtolower($folder) === 'root') {
+            return '';
+        }
+
+        return trim($folder, '/');
     }
 
-    // remove invisible unicode characters
-    $folder = preg_replace('/[\x00-\x1F\x7F\xA0]/u', '', $folder);
-
-    // collapse multiple spaces
-    $folder = preg_replace('/\s+/', ' ', $folder);
-
-    $folder = trim($folder);
-
-    if (strtolower($folder) === 'root') {
-        return '';
-    }
-
-    return trim($folder, '/');
-}
-public function downloadFileFromApi($authToken, $segment, $folder, $fileName, $savePath)
+    public function downloadFileFromApi($authToken, $segment, $folder, $fileName, $savePath)
     {
         $creds = $this->nseCredentials;
 
@@ -222,7 +223,7 @@ public function downloadFileFromApi($authToken, $segment, $folder, $fileName, $s
         return false;
     }
 
-     private function decompressGzFile($filePath)
+    private function decompressGzFile($filePath)
     {
         $bufferSize = 4096;
         // New filename is the original path MINUS '.gz'
@@ -257,18 +258,20 @@ public function downloadFileFromApi($authToken, $segment, $folder, $fileName, $s
         $tempPath = $filePath . '.tmp';
         $outputHandle = fopen($tempPath, 'w');
 
-        // Read Pipe (|), Write Comma (Standard CSV)
-        while (($data = fgetcsv($inputHandle, 0, '|')) !== false) {
-            // Filter empty rows if necessary
-            if (array_filter($data)) {
-                fputcsv($outputHandle, $data);
-            }
+        while (($line = fgets($inputHandle)) !== false) {
+
+            // Replace pipe with comma
+            $line = str_replace('|', ',', $line);
+
+            // Remove unwanted wrapping quotes
+            $line = trim($line);
+
+            fwrite($outputHandle, $line . PHP_EOL);
         }
 
         fclose($inputHandle);
         fclose($outputHandle);
 
-        // Swap the temp file with the original
         rename($tempPath, $filePath);
     }
 }

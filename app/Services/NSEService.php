@@ -268,18 +268,20 @@ class NSEService
         $tempPath = $filePath . '.tmp';
         $outputHandle = fopen($tempPath, 'w');
 
-        // Read Pipe (|), Write Comma (Standard CSV)
-        while (($data = fgetcsv($inputHandle, 0, '|')) !== false) {
-            // Filter empty rows if necessary
-            if (array_filter($data)) {
-                fputcsv($outputHandle, $data);
-            }
+        while (($line = fgets($inputHandle)) !== false) {
+
+            // Replace pipe with comma
+            $line = str_replace('|', ',', $line);
+
+            // Remove unwanted wrapping quotes
+            $line = trim($line);
+
+            fwrite($outputHandle, $line . PHP_EOL);
         }
 
         fclose($inputHandle);
         fclose($outputHandle);
 
-        // Swap the temp file with the original
         rename($tempPath, $filePath);
     }
 }
