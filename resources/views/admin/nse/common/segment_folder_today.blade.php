@@ -15,7 +15,9 @@
         <i data-lucide="refresh-cw" class="w-4 h-4"></i>
         SYNC NOW
     </button>
-    <div class="text-xs text-gray-500 mt-1">Last synced: {{ $lastSynced }}</div>
+    @if ($lastSynced && $lastSynced != 'Never')
+        <div class="text-xs text-gray-500 mt-1">Last synced: {{ $lastSynced }}</div>
+    @endif
 </div>
 @endsection
 
@@ -29,53 +31,51 @@
             </div>
         </div>
 
-          <nav class="p-2 text-sm font-medium text-gray-600">
-    <ol class="flex items-center gap-2 flex-wrap">
+        <nav class="mb-4 text-sm font-medium text-gray-600">
+            <ol class="flex items-center gap-2 flex-wrap">
 
-        {{-- Segment Link --}}
-        <li>
-            <a href="{{ route('nse.common.segment.folder.today', [
-                        'segment' => $segment,
-                        'folder' => 'root'
-                    ]) }}"
-               class="hover:text-brand font-semibold">
-                {{ Str::upper($segment) }}
-            </a>
-        </li>
+                {{-- Root --}}
+                <li>
+                    <a href="{{ route('nse.segment', ['segment' => $segment]) }}"
+                        class="hover:text-brand font-semibold">
+                        {{ Str::upper($segment) }}
+                    </a>
+                </li>
 
-        @php
-            $rawFolderParam = request()->query('folder');
+                @foreach($parts as $index => $part)
 
-            // Split folders
-            $folderParts = array_filter(explode('/', $rawFolderParam));
+                @php
+                $path = $path ? $path.'/'.$part : $part;
+                @endphp
 
-            // ❌ Remove "root" from breadcrumb display
-            $folderParts = array_filter($folderParts, fn($p) => $p !== 'root');
+                <li class="text-gray-400">/</li>
 
-            $accumulatedPath = '';
-        @endphp
+                <li>
+                    @if($index === count($parts) - 1)
 
-        @foreach($folderParts as $part)
-            @php
-                $accumulatedPath .= ($accumulatedPath ? '/' : '') . $part;
-            @endphp
+                    {{-- Current folder --}}
+                    <span class="text-gray-900 font-semibold">
+                        {{ $part }}
+                    </span>
 
-            <li class="text-gray-400">/</li>
+                    @else
 
-            <li>
-                <a href="{{ route('nse.common.segment.folder.today', [
+                    {{-- Parent folder --}}
+                    <a href="{{ route('nse.segment.today', [
                             'segment' => $segment,
-                            'folder' => 'root'
-                        ]) }}?folder={{ $accumulatedPath }}"
-                   class="hover:text-brand font-semibold">
-                    {{ $part }}
-                </a>
-            </li>
-        @endforeach
+                            'folder' => $path
+                        ]) }}"
+                        class="hover:text-brand font-semibold">
+                        {{ $part }}
+                    </a>
 
-    </ol>
-</nav>
+                    @endif
+                </li>
 
+                @endforeach
+
+            </ol>
+        </nav>
         <div class="relative overflow-x-auto" style="max-height: 60vh;">
             <table class="w-full text-sm text-left">
                 <thead class="text-xs text-gray-700 font-bold uppercase bg-gray-100 sticky top-0">
@@ -140,14 +140,25 @@
                     <tr>
                         <td colspan="5" class="text-center py-16 text-gray-500">
                             <i data-lucide="cloud-off" class="w-12 h-12 mx-auto text-gray-300"></i>
-                            <p class="mt-4 text-lg font-semibold text-gray-600">No activity found.</p>
-                            <p class="text-sm">Sync to fetch the latest files.</p>
+                            <p class="mt-4 text-lg font-semibold text-gray-600">No activity found for today.</p>
+                            <p class="text-sm">Check back later or sync to fetch the latest files.</p>
                         </td>
                     </tr>
                     @endforelse
                 </tbody>
             </table>
         </div>
+    </div>
+
+    <div class="text-center py-4 border-t border-gray-100">
+        <a href="{{ route('nse.segment.archives', ['segment' => $segment, 'folder' => $folder]) }}"
+            class="inline-flex flex-col items-center gap-1 text-xs font-bold text-gray-500 uppercase tracking-wider hover:text-brand transition-colors">
+            <div
+                class="w-10 h-10 flex items-center justify-center rounded-full bg-gray-200 group-hover:bg-brand-light shadow-sm border border-gray-200 transition-colors">
+                <i data-lucide="arrow-up" class="w-5 h-5"></i>
+            </div>
+            Load Archive History
+        </a>
     </div>
 </main>
 
@@ -191,7 +202,7 @@
             `<i data-lucide="loader-circle" class="w-4 h-4 animate-spin mr-2"></i>`;
         lucide.createIcons();
 
-        const url = "{{ route('nse.common.file.prepare', ['id' => ':id']) }}".replace(':id', id);
+        const url = "{{ route('nse.file.prepare', ['id' => ':id']) }}".replace(':id', id);
 
         fetch(url, {
                 method: 'GET',
@@ -353,7 +364,7 @@
         btn.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin mr-2"></i> Zipping...';
         lucide.createIcons();
 
-        fetch("{{ route('nse.common.download.bulk.prepare') }}", {
+        fetch("{{ route('nse.download.bulk.prepare') }}", {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

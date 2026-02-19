@@ -15,7 +15,9 @@ $path = '';
         <i data-lucide="refresh-cw" class="w-4 h-4"></i>
         SYNC NOW
     </button>
-    <div class="text-xs text-gray-500 mt-1">Last synced: {{ $lastSynced }}</div>
+    @if ($lastSynced && $lastSynced != 'Never')
+        <div class="text-xs text-gray-500 mt-1">Last synced: {{ $lastSynced }}</div>
+    @endif
 </div>
 @endsection
 
