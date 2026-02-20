@@ -121,7 +121,6 @@ class NSECommanService
         }
 
         if ($info['http_code'] !== 200) {
-
             Log::warning("NSE API non-200 response", [
                 'code' => $info['http_code'],
                 'body' => $response
@@ -150,6 +149,16 @@ class NSECommanService
         }
 
         return trim($folder, '/');
+    }
+
+
+    function normalizeUnderscoreTitle($string)
+    {
+        return str_replace(
+            ' ',
+            '_',
+            Str::title(str_replace('_', ' ', $string))
+        );
     }
 
     public function downloadFileFromApi($authToken, $segment, $folder, $fileName, $savePath)
