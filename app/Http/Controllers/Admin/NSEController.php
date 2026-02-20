@@ -154,6 +154,12 @@ class NSEController extends Controller
             ]);
         }
 
+        $cacheKey = "nse_sync_" . Str::slug($segment . '_' . $folder . '_today');
+        $lastSynced = Cache::get($cacheKey . '_time');
+        $lastSyncedFormatted = $lastSynced
+            ? Carbon::parse($lastSynced)->format('h:i:s A')
+            : 'Never';
+
         /*
     |--------------------------------------------------------------------------
     | Group by Date
@@ -201,10 +207,10 @@ class NSEController extends Controller
 
         return view('admin.nse.segment_folder_archives', [
             'segment' => $segment,
-            'treeByDate' => $treeByDate
+            'treeByDate' => $treeByDate,
+            'lastSynced' => $lastSyncedFormatted
         ]);
     }
-
 
     public function clearArchiveFolderCache($segment, $folder)
     {
@@ -218,11 +224,56 @@ class NSEController extends Controller
     public function prepareDownload(Request $request, $id)
     {
         try {
+
+            $source = $request->query('source', 'today');
+            // today | archive
+
+            $today = now()->toDateString();
+            $fileRecord = NseContent::findOrFail($id);
+
+            /*
+        |--------------------------------------------------------------------------
+        | ARCHIVE MODE → NEVER call API
+        |--------------------------------------------------------------------------
+        */
+            if ($source === 'archive') {
+
+                $storagePath = storage_path(
+                    'app/nse/' .
+                    $today . '/' .
+                    $fileRecord->segment . '/' .
+                    $fileRecord->parent_folder . '/' .
+                    $fileRecord->name
+                );
+
+                if (!file_exists($storagePath)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'File not available in archive storage.'
+                    ], 404);
+                }
+
+                return response()->json([
+                    'success' => true,
+                    'url' => route('nse.file.serve', ['id' => $id])
+                ]);
+            }
+
+            /*
+        |--------------------------------------------------------------------------
+        | TODAY MODE → Download if missing
+        |--------------------------------------------------------------------------
+        */
+
             $authToken = $this->nseService->getAuthToken();
 
             if (!$authToken) {
-                return response()->json(['success' => false, 'message' => 'Authentication failed.'], 401);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Authentication failed.'
+                ], 401);
             }
+
             SyncNseFileJob::dispatchSync($id, $authToken);
 
             return response()->json([
@@ -230,14 +281,37 @@ class NSEController extends Controller
                 'url' => route('nse.file.serve', ['id' => $id])
             ]);
         } catch (\Exception $e) {
-            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
+
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage()
+            ], 500);
         }
     }
+
 
     public function serveFile($id)
     {
         $fileRecord = NseContent::findOrFail($id);
-        $relativePath = "nse_cache/{$fileRecord->segment}/{$fileRecord->parent_folder}/{$fileRecord->name}";
+
+        /*
+    |--------------------------------------------------------------------------
+    | Resolve date folder from DB
+    |--------------------------------------------------------------------------
+    */
+        if (!$fileRecord->created_at) {
+            abort(404, 'Invalid file record.');
+        }
+
+        $dateFolder = $fileRecord->created_at->format('Y-m-d');
+
+        $relativePath = 'nse/' .
+            $dateFolder . '/' .
+            $fileRecord->segment . '/' .
+            ($fileRecord->parent_folder !== 'root'
+                ? $fileRecord->parent_folder . '/'
+                : '') .
+            $fileRecord->name;
 
         if (!Storage::exists($relativePath)) {
             abort(404, 'File not found on server.');

@@ -19,9 +19,9 @@ class SyncNseFolders implements ShouldQueue, ShouldBeUnique
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public $timeout = 1800; // 30 minutes
+    public $timeout = 2800; // 30 minutes
     public $tries = 3;
-    public $uniqueFor = 100;
+    public $uniqueFor = 10;
 
     private string $segment;
     private string $folder;
@@ -215,14 +215,10 @@ class SyncNseFolders implements ShouldQueue, ShouldBeUnique
         | Download only if file & needed
         |--------------------------------------------------------------------------
         */
-            if ($shouldDownload && $type === 'File') {
+            // Inside your foreach loop where you download the file:
 
-                $storagePath = storage_path(
-                    'app/nse/' .
-                        $today . '/' .
-                        $segment . '/' .
-                        ($parent !== 'root' ? $parent . '/' : '')
-                );
+            if ($shouldDownload && $type === 'File') {
+                $storagePath = storage_path('app/nse/' . $today . '/' . $segment . '/' . ($parent !== 'root' ? $parent . '/' : ''));
 
                 if (!file_exists($storagePath)) {
                     mkdir($storagePath, 0755, true);
@@ -230,13 +226,25 @@ class SyncNseFolders implements ShouldQueue, ShouldBeUnique
 
                 $savePath = $storagePath . $name;
 
-                $nseService->downloadFileFromApi(
-                    $authToken,
-                    $segment,
-                    $currentPath,
-                    $name,
-                    $savePath
-                );
+                // Example of wrapping the download in a try-catch to handle 401s
+                try {
+                    $nseService->downloadFileFromApi($authToken, $segment, $currentPath, $name, $savePath);
+                } catch (\Exception $e) {
+                    // Assuming your service throws an exception on 401. 
+                    // Adjust the condition based on how your service returns HTTP status codes.
+                    if ($e->getCode() == 401) {
+                        Log::channel('syncron')->warning("Token expired mid-download. Refreshing token.");
+
+                        // Fetch a new token
+                        $authToken = $nseService->getAuthToken();
+
+                        // Retry the download with the new token
+                        $nseService->downloadFileFromApi($authToken, $segment, $currentPath, $name, $savePath);
+                    } else {
+                        // Rethrow or log other errors (like the 504s)
+                        Log::channel('syncron')->error("Download failed: " . $e->getMessage());
+                    }
+                }
             }
         }
 

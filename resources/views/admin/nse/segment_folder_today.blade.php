@@ -30,7 +30,11 @@ $path = '';
     <nav class="p-2 text-sm font-medium text-gray-600">
         <ol class="flex items-center gap-2 flex-wrap">
             <li>
-                NSE Member Segment
+                NSE
+            </li>
+            <li class="text-gray-400">/</li>
+            <li>
+                Member Segment
             </li>
             <li class="text-gray-400">/</li>
             <li>
@@ -96,16 +100,16 @@ $path = '';
                 </thead>
                 <tbody>
                     @forelse($contents as $item)
-                        @php
-                            $isFolder = $item->type == 'Folder';
-                            $url = 'folder=' . $item->parent_folder .'/'. $item->name;
-                            $url = str_replace('root/', '', $url);
-                            $isModified = false;
-                            if ($item->nse_created_at && $item->nse_modified_at) {
-                                $isModified = $item->nse_created_at->ne($item->nse_modified_at);
-                            }
-                            $currentPath = url()->current();
-                        @endphp
+                    @php
+                    $isFolder = $item->type == 'Folder';
+                    $url = 'folder=' . $item->parent_folder .'/'. $item->name;
+                    $url = str_replace('root/', '', $url);
+                    $isModified = false;
+                    if ($item->nse_created_at && $item->nse_modified_at) {
+                    $isModified = $item->nse_created_at->ne($item->nse_modified_at);
+                    }
+                    $currentPath = url()->current();
+                    @endphp
                     <tr class="bg-white border-b border-gray-200 hover:bg-gray-50">
                         <td class="p-4">
                             @if (!$isFolder)
@@ -160,7 +164,7 @@ $path = '';
     </div>
 
     <div class="text-center py-4 border-t border-gray-100">
-        <a href="{{ route('nse.segment.archives', ['segment' => $segment, 'folder' => $folder]) }}"
+        <a href="{{ route('nse.segment.archives', ['segment' => $segment, 'folder' => 'root']) }}"
             class="inline-flex flex-col items-center gap-1 text-xs font-bold text-gray-500 uppercase tracking-wider hover:text-brand transition-colors">
             <div
                 class="w-10 h-10 flex items-center justify-center rounded-full bg-gray-200 group-hover:bg-brand-light shadow-sm border border-gray-200 transition-colors">
@@ -211,7 +215,7 @@ $path = '';
             `<i data-lucide="loader-circle" class="w-4 h-4 animate-spin mr-2"></i>`;
         lucide.createIcons();
 
-        const url = "{{ route('nse.file.prepare', ['id' => ':id']) }}".replace(':id', id);
+        const url = "{{ route('nse.file.prepare', ['id' => ':id']) }}".replace(':id', id) + '?source=today';
 
         fetch(url, {
                 method: 'GET',
@@ -236,7 +240,7 @@ $path = '';
                     btn.innerHTML = `<i data-lucide="check" class="w-4 h-4 mr-2"></i>`;
                     lucide.createIcons();
 
-                    window.location.href = data.url;
+                    window.location.reload();
 
                     setTimeout(() => {
                         btn.disabled = false;

@@ -3,14 +3,13 @@
 namespace App\Jobs;
 
 use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue; // Not used for sync, but good practice
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use App\Models\NseContent;
-use App\Services\NSEService; // Ensure you import your service
+use App\Services\NSEService;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
+use Carbon\Carbon;
 
 class SyncNseFileJob
 {
@@ -18,37 +17,65 @@ class SyncNseFileJob
 
     protected $fileId;
     protected $authToken;
+    protected $source; // today | archive
 
-    public function __construct($fileId, $authToken)
+    public function __construct($fileId, $authToken = null, $source = 'today')
     {
         $this->fileId = $fileId;
         $this->authToken = $authToken;
+        $this->source = $source;
     }
 
     public function handle(NSEService $nseService)
     {
         $fileRecord = NseContent::findOrFail($this->fileId);
 
-        $relativePath = "nse_cache/{$fileRecord->segment}/{$fileRecord->parent_folder}/{$fileRecord->name}";
+        $dateFolder = Carbon::parse($fileRecord->created_at)->format('Y-m-d');
+
+        $relativePath = "nse/{$dateFolder}/{$fileRecord->segment}/{$fileRecord->parent_folder}/{$fileRecord->name}";
         $absolutePath = Storage::path($relativePath);
 
-        $shouldDownload = true;
-        // if (Storage::exists($relativePath)) {
-        //     $localTimestamp = Storage::lastModified($relativePath);
-        //     $remoteTimestamp = $fileRecord->nse_modified_at ? $fileRecord->nse_modified_at->timestamp : 0;
+        $fileExistsLocally = Storage::exists($relativePath);
 
-        //     if ($localTimestamp >= $remoteTimestamp) {
-        //         $shouldDownload = false;
-        //     }
-        // }
+        /*
+        |--------------------------------------------------------------------------
+        | ARCHIVE VIEW LOGIC
+        |--------------------------------------------------------------------------
+        | Only serve from local. Never hit API.
+        */
+        if ($this->source === 'archive') {
 
-        if ($shouldDownload) {
+            if (!$fileExistsLocally) {
+                throw new \Exception("Archived file not found in local storage.");
+            }
+
+            return;
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | TODAY VIEW LOGIC
+        |--------------------------------------------------------------------------
+        | If not exists locally → download from API.
+        */
+        if (!$fileExistsLocally) {
+
+            if (!$this->authToken) {
+                throw new \Exception("Missing auth token for NSE API download.");
+            }
+
             $directory = dirname($relativePath);
+
             if (!Storage::exists($directory)) {
                 Storage::makeDirectory($directory);
             }
 
-            $folderParam = ($fileRecord->parent_folder === 'root' || $fileRecord->parent_folder === 'Root' || $fileRecord->parent_folder === '') ? '' : $fileRecord->parent_folder;
+            $folderParam = ($fileRecord->parent_folder === 'root'
+                || $fileRecord->parent_folder === ''
+                || strtolower($fileRecord->parent_folder) === 'root')
+                ? ''
+                : $fileRecord->parent_folder;
+
             $success = $nseService->downloadFileFromApi(
                 $this->authToken,
                 $fileRecord->segment,
