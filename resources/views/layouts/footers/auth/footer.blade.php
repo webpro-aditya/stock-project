@@ -5,5 +5,5 @@
       {{ date('d M, Y') }}
     </div>
     <!-- Default to the left -->
-    {{--<strong>Copyright &copy; {{ date('Y') }} <a href="">Stock MS</a>.</strong> All rights reserved.--}}
+    <strong>Copyright &copy; {{ date('Y') }} <a href="">Stock MS</a>.</strong> All rights reserved.
   </footer>

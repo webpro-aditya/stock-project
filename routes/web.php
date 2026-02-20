@@ -7,6 +7,7 @@ use App\Http\Controllers\Admin\BSEController;
 use App\Http\Controllers\Admin\NSEController;
 use App\Http\Controllers\Admin\NSECommanController;
 
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -20,12 +21,22 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
-Route::get('/pass', function () {
-    echo Illuminate\Support\Facades\Hash::make('Acme@54321');
-});
+// Route::get('/pass', function () {
+//     echo Illuminate\Support\Facades\Hash::make('Acme@54321');
+// });
 
 // Authenticated routes
 Route::group(['middleware' => 'auth'], function () {
+
+Route::get('/nse/sync/progress/{segment}', function ($segment) {
+    $progress = Cache::get("nse_sync_progress_{$segment}");
+            return response()->json($progress ?? [
+                'current' => 0,
+                'total' => 0,
+                'percentage' => 0,
+                'status' => 'idle'
+            ]);
+        })->name('nse.sync.progress');
     // Admin prefix routes
     Route::group(['middleware' => 'auth', 'prefix' => 'admin'], function () {
         // Access only for admin

@@ -12,6 +12,7 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -37,8 +38,27 @@ class SyncNseFolders implements ShouldQueue, ShouldBeUnique
         return $this->segment;
     }
 
+    private function updateProgress(int $current, int $total): void
+    {
+        $percentage = $total > 0 ? intval(($current / $total) * 100) : 0;
+
+        Cache::put("nse_sync_progress_{$this->segment}", [
+            'current' => $current,
+            'total' => $total,
+            'percentage' => $percentage,
+            'status' => 'running'
+        ], now()->addMinutes(60));
+    }
+
     public function handle(NSEService $nseService)
     {
+        Cache::put("nse_sync_progress_{$this->segment}", [
+            'current' => 0,
+            'total' => 0,
+            'percentage' => 0,
+            'status' => 'starting'
+        ], now()->addMinutes(60));
+
         $authToken = $nseService->getAuthToken();
 
         if (!$authToken) {
@@ -64,6 +84,13 @@ class SyncNseFolders implements ShouldQueue, ShouldBeUnique
         Log::channel('syncron')->info("NSE sync completed", [
             'segment' => $this->segment
         ]);
+
+        Cache::put("nse_sync_progress_{$this->segment}", [
+            'current' => 100,
+            'total' => 100,
+            'percentage' => 100,
+            'status' => 'completed'
+        ], now()->addMinutes(10));
     }
 
     /**
@@ -121,6 +148,11 @@ class SyncNseFolders implements ShouldQueue, ShouldBeUnique
         if (empty($apiResponse['data']) || !is_array($apiResponse['data'])) {
             return;
         }
+
+        $totalItems = count($apiResponse['data']);
+
+        $progress = Cache::get("nse_sync_progress_{$this->segment}");
+        $currentCount = $progress['current'] ?? 0;
 
         /*
     |--------------------------------------------------------------------------
@@ -246,6 +278,9 @@ class SyncNseFolders implements ShouldQueue, ShouldBeUnique
                     }
                 }
             }
+
+            $currentCount++;
+            $this->updateProgress($currentCount, $totalItems);
         }
 
         /*

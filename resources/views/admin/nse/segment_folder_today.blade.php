@@ -26,6 +26,15 @@ $path = '';
 @endsection
 
 @section('content')
+<div id="syncProgressWrapper" class="hidden mt-3">
+    <div class="w-full bg-gray-200 rounded-lg overflow-hidden">
+        <div id="syncProgressBar"
+            class="bg-brand text-xs font-semibold text-white text-center py-1 transition-all duration-300"
+            style="width: 0%">
+            0%
+        </div>
+    </div>
+</div>
 <main class="flex-1 p-6 bg-gray-50">
     <nav class="p-2 text-sm font-medium text-gray-600">
         <ol class="flex items-center gap-2 flex-wrap">
@@ -291,11 +300,14 @@ $path = '';
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
+                    document.getElementById('syncProgressWrapper').classList.remove('hidden');
+
                     Toast.fire({
                         icon: 'info',
                         title: 'Sync started...'
                     });
-                    // setTimeout(() => window.location.reload(), 1000);
+
+                    startProgressPolling(segment);
                 } else {
                     Toast.fire({
                         icon: 'error',
@@ -316,6 +328,44 @@ $path = '';
                 btn.innerHTML = originalHtml;
                 lucide.createIcons();
             });
+    }
+
+    let progressInterval = null;
+
+    function startProgressPolling(segment) {
+
+        if (progressInterval) {
+            clearInterval(progressInterval);
+        }
+
+        progressInterval = setInterval(() => {
+
+            fetch("{{ route('nse.sync.progress', ['segment' => ':segment']) }}"
+                    .replace(':segment', segment))
+                .then(res => res.json())
+                .then(data => {
+
+                    const bar = document.getElementById('syncProgressBar');
+
+                    bar.style.width = data.percentage + '%';
+                    bar.innerText = data.percentage + '%';
+
+                    if (data.status === 'completed') {
+
+                        clearInterval(progressInterval);
+
+                        Toast.fire({
+                            icon: 'success',
+                            title: 'Sync Completed'
+                        });
+
+                        setTimeout(() => {
+                            window.location.reload();
+                        }, 1000);
+                    }
+                });
+
+        }, 2000);
     }
 
     function checkSelection() {
