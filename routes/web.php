@@ -20,9 +20,9 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
-// Route::get('/pass', function () {
-//     echo Illuminate\Support\Facades\Hash::make('admin123');
-// });
+Route::get('/pass', function () {
+    echo Illuminate\Support\Facades\Hash::make('Acme@54321');
+});
 
 // Authenticated routes
 Route::group(['middleware' => 'auth'], function () {

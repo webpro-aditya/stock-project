@@ -1,6 +1,6 @@
 @extends('layouts.user_type.auth')
 
-@section('page_title', __('NSE Explorer - ' . Str::upper($segment)))
+@section('page_title', __('Extranet Sync - ' . Str::upper($segment)))
 
 @php
 $folder = trim($folder ?? '', '/');
