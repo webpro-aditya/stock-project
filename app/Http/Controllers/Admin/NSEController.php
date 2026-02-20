@@ -41,6 +41,8 @@ class NSEController extends Controller
     public function getTodaySegmentFolder(Request $request, $segment, $folder)
     {
         $segment = Str::upper($segment);
+        $currentFolder = $request->query('folder') ?? 'root';
+        $today = Carbon::today();
 
         $cacheKey = "nse_sync_" . Str::slug($segment . '_' . $folder . '_today');
         $lastSynced = Cache::get($cacheKey . '_time');
@@ -48,15 +50,68 @@ class NSEController extends Controller
             ? Carbon::parse($lastSynced)->format('h:i:s A')
             : 'Never';
 
-        $currentFolder = $request->query('folder') ?? 'root';
+        /*
+    |--------------------------------------------------------------------------
+    | STEP 1 — Get today's modified items
+    |--------------------------------------------------------------------------
+    */
+        $todayItems = NseContent::where('segment', $segment)
+            ->whereDate('nse_modified_at', $today)
+            ->get(['path']);
 
+        if ($todayItems->isEmpty()) {
+            return view('admin.nse.segment_folder_today', [
+                'segment'     => $segment,
+                'folder'      => $currentFolder,
+                'contents'    => collect(),
+                'lastSynced'  => $lastSyncedFormatted
+            ]);
+        }
+
+        /*
+    |--------------------------------------------------------------------------
+    | STEP 2 — Collect all parent paths
+    |--------------------------------------------------------------------------
+    */
+        $requiredPaths = collect();
+
+        foreach ($todayItems as $item) {
+
+            $parts = explode('/', $item->path);
+
+            $accumulated = '';
+
+            foreach ($parts as $index => $part) {
+
+                $accumulated = $index === 0
+                    ? $part
+                    : $accumulated . '/' . $part;
+
+                $requiredPaths->push($accumulated);
+            }
+        }
+
+        $requiredPaths = $requiredPaths->unique();
+
+        /*
+    |--------------------------------------------------------------------------
+    | STEP 3 — Load current folder contents
+    |--------------------------------------------------------------------------
+    */
         $contents = NseContent::where('segment', $segment)
-            ->where('parent_folder', $currentFolder)
-            ->where(function ($query) {
-                $query->whereDate('nse_created_at', Carbon::today());
+            ->where(function ($query) use ($currentFolder) {
+                if ($currentFolder === 'root') {
+                    $query->where('parent_folder', 'root');
+                } else {
+                    $query->where('parent_folder', $currentFolder);
+                }
             })
-            ->orderByDesc('type') // Folder first
-            ->orderByDesc('nse_modified_at') // Latest files first
+            ->where(function ($query) use ($today, $requiredPaths) {
+                $query->whereDate('nse_modified_at', $today)
+                    ->orWhereIn('path', $requiredPaths);
+            })
+            ->orderByDesc('type')
+            ->orderByDesc('nse_modified_at')
             ->get();
 
         return view('admin.nse.segment_folder_today', [
@@ -66,6 +121,7 @@ class NSEController extends Controller
             'lastSynced'  => $lastSyncedFormatted
         ]);
     }
+
 
     public function syncMemberSegment($segment)
     {
@@ -83,69 +139,72 @@ class NSEController extends Controller
 
     public function getArchiveSegmentFolder($segment, $folder)
     {
-        $authToken = $this->nseService->getAuthToken();
+        $segment = Str::upper($segment);
+        $today = Carbon::today();
 
-        if (!$authToken) {
-            return redirect()->route('nse.index')->withErrors('Unable to authenticate with NSE API. Please try again later.');
-        }
-
-        $cacheKey = "nse_sync_" . Str::slug($segment . '_' . $folder);
-
-        if (!Cache::has($cacheKey)) {
-
-            $apiResponse = $this->nseService->getFolderFilesList(
-                $authToken,
-                Str::upper($segment),
-                Str::studly($folder)
-            );
-
-            if (isset($apiResponse['data']) && is_array($apiResponse['data'])) {
-                $dataToUpsert = [];
-                foreach ($apiResponse['data'] as $item) {
-                    $dateString = $item['lastUpdated'] ?? $item['lastModified'] ?? null;
-
-                    $dataToUpsert[] = [
-                        'segment'         => Str::upper($segment),
-                        'parent_folder'   => $folder,
-                        'name'            => $item['name'],
-                        'type'            => $item['type'],
-                        'path'            => Str::upper($segment) . '/' . $folder . '/' . $item['name'],
-                        'size'            => $item['size'] ?? 0,
-                        'nse_modified_at' => $dateString ? Carbon::parse($dateString) : null,
-                        'created_at'      => now(),
-                        'updated_at'      => now(),
-                    ];
-                }
-
-                if (!empty($dataToUpsert)) {
-                    NseContent::upsert($dataToUpsert, ['path'], ['size', 'nse_modified_at', 'updated_at']);
-                }
-
-                Cache::put($cacheKey, true, now()->addMinutes(15));
-            }
-        }
-
-        $todayStartIST = now()->setTimezone('Asia/Kolkata')->startOfDay()->utc();
-
-        $contents = NseContent::where('segment', Str::upper($segment))
-            ->where('parent_folder', $folder)
-            ->where('type', 'file')
-            ->where('nse_modified_at', '<', $todayStartIST)
-            ->orderBy('nse_modified_at', 'desc')
-            ->orderBy('type', 'desc')
+        $records = NseContent::where('segment', $segment)
+            ->whereDate('nse_modified_at', '<', $today)
+            ->orderByDesc('nse_modified_at')
             ->get();
 
-        $groupedContents = $contents->groupBy(function ($item) {
-            return $item->nse_modified_at->format('Y-m-d');
+        if ($records->isEmpty()) {
+            return view('admin.nse.segment_folder_archives', [
+                'segment' => $segment,
+                'treeByDate' => collect()
+            ]);
+        }
+
+        /*
+    |--------------------------------------------------------------------------
+    | Group by Date
+    |--------------------------------------------------------------------------
+    */
+        $grouped = $records->groupBy(function ($item) {
+            return Carbon::parse($item->nse_modified_at)->format('Y-m-d');
         });
 
+        /*
+    |--------------------------------------------------------------------------
+    | Build Folder Tree Per Date
+    |--------------------------------------------------------------------------
+    */
+        $treeByDate = [];
+
+        foreach ($grouped as $date => $items) {
+
+            $tree = [];
+
+            foreach ($items as $item) {
+
+                $parts = explode('/', $item->path);
+                $current = &$tree;
+
+                foreach ($parts as $index => $part) {
+
+                    if (!isset($current[$part])) {
+                        $current[$part] = [
+                            '_meta' => null,
+                            'children' => []
+                        ];
+                    }
+
+                    if ($index === count($parts) - 1) {
+                        $current[$part]['_meta'] = $item;
+                    }
+
+                    $current = &$current[$part]['children'];
+                }
+            }
+
+            $treeByDate[$date] = $tree;
+        }
+
         return view('admin.nse.segment_folder_archives', [
-            'segment'   => $segment,
-            'folder'    => $folder,
-            'groupedContents'  => $groupedContents,
-            'authToken' => $authToken
+            'segment' => $segment,
+            'treeByDate' => $treeByDate
         ]);
     }
+
 
     public function clearArchiveFolderCache($segment, $folder)
     {

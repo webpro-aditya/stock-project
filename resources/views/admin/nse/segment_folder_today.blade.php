@@ -88,7 +88,7 @@ $path = '';
                             <input type="checkbox" onchange="toggleAll(this)"
                                 class="w-4 h-4 custom-checkbox rounded border-gray-300">
                         </th>
-                        <th scope="col" class="px-6 py-3">File Name</th>
+                        <th scope="col" class="px-6 py-3">Folder / File Name</th>
                         <th scope="col" class="px-6 py-3">Created</th>
                         <th scope="col" class="px-6 py-3">Last Updated</th>
                         <th scope="col" class="px-6 py-3 text-right">Action</th>
