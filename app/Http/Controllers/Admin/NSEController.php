@@ -240,7 +240,7 @@ class NSEController extends Controller
 
                 $storagePath = storage_path(
                     'app/nse/' .
-                    $today . '/' .
+                    $fileRecord->nse_modified_at->toDateString() . '/' .
                     $fileRecord->segment . '/' .
                     $fileRecord->parent_folder . '/' .
                     $fileRecord->name

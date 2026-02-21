@@ -38,11 +38,11 @@ class SyncNseFileJob
         $fileExistsLocally = Storage::exists($relativePath);
 
         /*
-        |--------------------------------------------------------------------------
-        | ARCHIVE VIEW LOGIC
-        |--------------------------------------------------------------------------
-        | Only serve from local. Never hit API.
-        */
+    |--------------------------------------------------------------------------
+    | ARCHIVE VIEW LOGIC
+    |--------------------------------------------------------------------------
+    | Only serve from local. Never hit API.
+    */
         if ($this->source === 'archive') {
 
             if (!$fileExistsLocally) {
@@ -53,12 +53,33 @@ class SyncNseFileJob
         }
 
         /*
-        |--------------------------------------------------------------------------
-        | TODAY VIEW LOGIC
-        |--------------------------------------------------------------------------
-        | If not exists locally → download from API.
-        */
+    |--------------------------------------------------------------------------
+    | TODAY VIEW LOGIC
+    |--------------------------------------------------------------------------
+    | Download if:
+    |   - File does not exist
+    |   - OR NSE modified date > local modified date
+    */
+        $shouldDownload = false;
+
         if (!$fileExistsLocally) {
+
+            $shouldDownload = true;
+        } else {
+
+            $localModified = Carbon::createFromTimestamp(
+                filemtime($absolutePath)
+            );
+
+            if (
+                $fileRecord->nse_modified_at &&
+                $fileRecord->nse_modified_at->gt($localModified)
+            ) {
+                $shouldDownload = true;
+            }
+        }
+
+        if ($shouldDownload) {
 
             if (!$this->authToken) {
                 throw new \Exception("Missing auth token for NSE API download.");
@@ -70,11 +91,11 @@ class SyncNseFileJob
                 Storage::makeDirectory($directory);
             }
 
-            $folderParam = ($fileRecord->parent_folder === 'root'
-                || $fileRecord->parent_folder === ''
-                || strtolower($fileRecord->parent_folder) === 'root')
-                ? ''
-                : $fileRecord->parent_folder;
+            $folderParam = (
+                $fileRecord->parent_folder === 'root' ||
+                $fileRecord->parent_folder === '' ||
+                strtolower($fileRecord->parent_folder) === 'root'
+            ) ? '' : $fileRecord->parent_folder;
 
             $success = $nseService->downloadFileFromApi(
                 $this->authToken,
@@ -88,6 +109,11 @@ class SyncNseFileJob
                 throw new \Exception("Failed to download file from NSE API.");
             }
 
+            /*
+        |--------------------------------------------------------------------------
+        | Sync Local File Timestamp
+        |--------------------------------------------------------------------------
+        */
             if ($fileRecord->nse_modified_at) {
                 touch($absolutePath, $fileRecord->nse_modified_at->timestamp);
             }

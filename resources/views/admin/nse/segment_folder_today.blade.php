@@ -249,7 +249,7 @@ $path = '';
                     btn.innerHTML = `<i data-lucide="check" class="w-4 h-4 mr-2"></i>`;
                     lucide.createIcons();
 
-                    window.location.reload();
+                    window.location.href = data.url;
 
                     setTimeout(() => {
                         btn.disabled = false;
