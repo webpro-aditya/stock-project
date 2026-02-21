@@ -80,71 +80,71 @@ class NSECommanController extends Controller
         ]);
     }
 
+    public function getArchiveSegmentFolder($segment, $folder)
+    {
+        $segment = Str::upper($segment);
+        $today = Carbon::today();
 
-    // public function getArchiveSegmentFolder($segment, $folder)
-    // {
-    //     $authToken = $this->nseCommanService->getAuthToken();
-    //     if (!$authToken) {
-    //         return redirect()->route('nse.index')->withErrors('Unable to authenticate with NSE API. Please try again later.');
-    //     }
+        $records = NseCommanContent::where('segment', $segment)
+            ->whereDate('nse_modified_at', '<', $today)
+            ->orderByDesc('nse_modified_at')
+            ->get();
 
-    //     $cacheKey = "nse_sync_" . Str::slug($segment . '_' . $folder);
+        if ($records->isEmpty()) {
+            return view('admin.nse.common.segment_folder_archives', [
+                'segment' => $segment,
+                'treeByDate' => collect()
+            ]);
+        }
 
-    //     if (!Cache::has($cacheKey)) {
+        /*
+    |--------------------------------------------------------------------------
+    | Group by Date
+    |--------------------------------------------------------------------------
+    */
+        $grouped = $records->groupBy(function ($item) {
+            return Carbon::parse($item->nse_modified_at)->format('Y-m-d');
+        });
 
-    //         $apiResponse = $this->nseCommanService->getFolderFilesList(
-    //             $authToken,
-    //             Str::upper($segment),
-    //             Str::studly($folder)
-    //         );
+        /*
+    |--------------------------------------------------------------------------
+    | Build Folder Tree Per Date
+    |--------------------------------------------------------------------------
+    */
+        $treeByDate = [];
 
-    //         if (isset($apiResponse['data']) && is_array($apiResponse['data'])) {
-    //             $dataToUpsert = [];
-    //             foreach ($apiResponse['data'] as $item) {
-    //                 $dateString = $item['lastUpdated'] ?? $item['lastModified'] ?? null;
+        foreach ($grouped as $date => $items) {
 
-    //                 $dataToUpsert[] = [
-    //                     'segment'         => Str::upper($segment),
-    //                     'parent_folder'   => $folder,
-    //                     'name'            => $item['name'],
-    //                     'type'            => $item['type'],
-    //                     'path'            => Str::upper($segment) . '/' . $folder . '/' . $item['name'],
-    //                     'size'            => $item['size'] ?? 0,
-    //                     'nse_modified_at' => $dateString ? Carbon::parse($dateString) : null,
-    //                     'created_at'      => now(),
-    //                     'updated_at'      => now(),
-    //                 ];
-    //             }
+            $tree = [];
+            foreach ($items as $item) {
+                $parts = explode('/', $item->path);
+                $current = &$tree;
 
-    //             if (!empty($dataToUpsert)) {
-    //                 NseCommanContent::upsert($dataToUpsert, ['path'], ['size', 'nse_modified_at', 'updated_at']);
-    //             }
+                foreach ($parts as $index => $part) {
 
-    //             Cache::put($cacheKey, true, now()->addMinutes(15));
-    //         }
-    //     }
+                    if (!isset($current[$part])) {
+                        $current[$part] = [
+                            '_meta' => null,
+                            'children' => []
+                        ];
+                    }
 
-    //     $todayStartIST = now()->setTimezone('Asia/Kolkata')->startOfDay()->utc();
+                    if ($index === count($parts) - 1) {
+                        $current[$part]['_meta'] = $item;
+                    }
 
-    //     $contents = NseCommanContent::where('segment', Str::upper($segment))
-    //         ->where('parent_folder', $folder)
-    //         ->where('type', 'file')
-    //         ->where('nse_modified_at', '<', $todayStartIST)
-    //         ->orderBy('nse_modified_at', 'desc')
-    //         ->orderBy('type', 'desc')
-    //         ->get();
+                    $current = &$current[$part]['children'];
+                }
+            }
 
-    //     $groupedContents = $contents->groupBy(function ($item) {
-    //         return $item->nse_modified_at->format('Y-m-d');
-    //     });
+            $treeByDate[$date] = $tree;
+        }
 
-    //     return view('admin.nse.segment_folder_archives', [
-    //         'segment'   => $segment,
-    //         'folder'    => $folder,
-    //         'groupedContents'  => $groupedContents,
-    //         'authToken' => $authToken
-    //     ]);
-    // }
+        return view('admin.nse.common.segment_folder_archives', [
+            'segment' => $segment,
+            'treeByDate' => $treeByDate
+        ]);
+    }
 
     public function clearArchiveFolderCache($segment, $folder)
     {

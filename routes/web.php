@@ -51,6 +51,7 @@ Route::get('/nse/sync/progress/{segment}', function ($segment) {
         Route::get('/files/nse/common/{segment}/{folder}/today', [NSECommanController::class, 'getTodaySegmentFolder'])->name('nse.common.segment.folder.today');
         Route::get('/files/nse/{segment}/{folder}/today', [NSEController::class, 'getTodaySegmentFolder'])->name('nse.segment.folder.today');
         Route::get('/files/nse/{segment}/{folder}/archives', [NSEController::class, 'getArchiveSegmentFolder'])->name('nse.segment.archives');
+        Route::get('/files/nse/common/{segment}/{folder}/archives', [NSECommanController::class, 'getArchiveSegmentFolder'])->name('nse.common.segment.archives');
         // Route::get('/files/nse/{id}/download', [NSEController::class, 'downloadFile'])->name('nse.segment.downloadFile');
         Route::get('/nse/download/prepare/{id}', [NseController::class, 'prepareDownload'])->name('nse.file.prepare');
         Route::get('/nse/common/download/prepare/{id}', [NSECommanController::class, 'prepareDownload'])->name('nse.common.file.prepare');

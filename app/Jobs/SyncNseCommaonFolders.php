@@ -80,104 +80,13 @@ class SyncNseCommaonFolders implements ShouldQueue, ShouldBeUnique
         return trim($path, '/');
     }
 
-    /**
-     * Recursive crawler
-     */
-    // private function syncFolderRecursive(
-    //     NSECommanService $NSECommanService,
-    //     string $authToken,
-    //     string $segment,
-    //     string $currentPath = ''
-    // ): void {
+    private function sanitize(string $value): string
+    {
+        $value = preg_replace('/[\x00-\x1F\x7F\xA0]/u', '', $value);
+        $value = preg_replace('/\s+/', ' ', $value);
 
-    //     $currentPath = $this->normalizePath($currentPath);
-
-    //     Log::info("Fetching folder", [
-    //         'segment' => $segment,
-    //         'folderPath' => $currentPath ?: '(root)'
-    //     ]);
-
-    //     /**
-    //      * Retry protects against random NSE failures.
-    //      */
-    //     $apiResponse = retry(3, function () use (
-    //         $NSECommanService,
-    //         $authToken,
-    //         $segment,
-    //         $currentPath
-    //     ) {
-
-    //         return $NSECommanService->getFolderFilesList(
-    //             $authToken,
-    //             $segment,
-    //             $currentPath // MUST be empty for root
-    //         );
-
-    //     }, 2000);
-
-    //     if (empty($apiResponse['data']) || !is_array($apiResponse['data'])) {
-    //         Log::warning("Empty folder", [
-    //             'path' => $currentPath ?: '(root)'
-    //         ]);
-    //         return;
-    //     }
-
-    //     $rows = [];
-
-    //     foreach ($apiResponse['data'] as $item) {
-
-    //         $fullPath = ltrim(
-    //             ($currentPath ? $currentPath.'/' : '') .
-    //             $item['name'],
-    //             '/'
-    //         );
-
-    //         $date = $item['lastUpdated']
-    //             ?? $item['lastModified']
-    //             ?? null;
-
-    //         $rows[] = [
-    //             'segment' => $segment,
-    //             'parent_folder' => $currentPath ?: 'root',
-    //             'name' => $item['name'],
-    //             'type' => $item['type'],
-    //             'path' => $fullPath,
-    //             'size' => $item['size'] ?? 0,
-    //             'nse_modified_at' => $date ? Carbon::parse($date) : null,
-    //             'created_at' => now(),
-    //             'updated_at' => now(),
-    //         ];
-    //     }
-
-    //     /**
-    //      * Bulk upsert (fast + safe)
-    //      */
-    //     NseCommanContent::upsert(
-    //         $rows,
-    //         ['path'],
-    //         ['size', 'nse_modified_at', 'updated_at']
-    //     );
-
-    //     /**
-    //      * Dive into subfolders
-    //      */
-    //     foreach ($apiResponse['data'] as $item) {
-
-    //         if (($item['type'] ?? null) === 'Folder') {
-
-    //             $nextPath = $currentPath
-    //                 ? $currentPath.'/'.$item['name']
-    //                 : $item['name'];
-
-    //             $this->syncFolderRecursive(
-    //                 $NSECommanService,
-    //                 $authToken,
-    //                 $segment,
-    //                 $nextPath
-    //             );
-    //         }
-    //     }
-    // }
+        return trim($value);
+    }
 
     private function syncFolderRecursive(
         NSECommanService $service,
@@ -211,79 +120,137 @@ class SyncNseCommaonFolders implements ShouldQueue, ShouldBeUnique
         }, 2000);
 
         if (empty($apiResponse['data']) || !is_array($apiResponse['data'])) {
-
-            Log::channel('syncron')->warning("Empty folder", [
-                'path' => $currentPath ?: '(root)'
-            ]);
-
             return;
         }
 
-        $batch = [];
+        $existingToday = NseCommanContent::where('segment', $segment)
+            ->where('parent_folder', $parent)
+            ->whereDate('created_at', $today)
+            ->get()
+            ->keyBy('name');
 
         foreach ($apiResponse['data'] as $item) {
 
+            $type = $item['type'] ?? null;
+            $name = $this->sanitize($item['name']);
+
             $fullPath = ltrim(
-                ($currentPath ? $currentPath . '/' : '') .
-                    $item['name'],
+                $segment . '/' .
+                    ($parent !== 'root' ? $parent . '/' : '') .
+                    $name,
                 '/'
             );
 
-            $date = $item['lastUpdated']
-                ?? $item['lastModified']
-                ?? null;
+            $apiDate = null;
 
-            $batch[] = [
-                'segment' => $segment,
-                'parent_folder' => $currentPath ?: 'root',
-                'name' => $item['name'],
-                'type' => $item['type'],
-                'path' => $fullPath,
-                'size' => $item['size'] ?? 0,
-                'nse_modified_at' => $date ? Carbon::parse($date) : null,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ];
+            if (!empty($item['lastUpdated']) || !empty($item['lastModified'])) {
+                $apiDate = Carbon::parse(
+                    $item['lastUpdated'] ?? $item['lastModified']
+                );
+            }
 
-            // 🔥 Flush batch safely
-            if (count($batch) === 500) {
+            $existing = $existingToday[$name] ?? null;
+            $shouldDownload = false;
 
-                NseCommanContent::upsert(
-                    $batch,
-                    ['path'],
-                    ['size', 'nse_modified_at', 'updated_at']
+            /*
+        |--------------------------------------------------------------------------
+        | CASE 1 — First time today
+        |--------------------------------------------------------------------------
+        */
+            if (!$existing) {
+
+                NseCommanContent::create([
+                    'segment' => $segment,
+                    'parent_folder' => $parent,
+                    'name' => $name,
+                    'type' => $type,
+                    'path' => $fullPath,
+                    'size' => $item['size'] ?? 0,
+                    'nse_created_at' => $apiDate,
+                    'nse_modified_at' => $apiDate,
+                    'created_at' => now(),
+                    'updated_at' => now()
+                ]);
+
+                if ($type === 'File') {
+                    $shouldDownload = true;
+                }
+            }
+
+            /*
+        |--------------------------------------------------------------------------
+        | CASE 2 — Already exists today
+        |--------------------------------------------------------------------------
+        */ else {
+
+                if (
+                    $apiDate &&
+                    $existing->nse_modified_at &&
+                    $apiDate->gt($existing->nse_modified_at)
+                ) {
+
+                    $existing->update([
+                        'size' => $item['size'] ?? 0,
+                        'nse_modified_at' => $apiDate,
+                        'updated_at' => now()
+                    ]);
+
+                    if ($type === 'File') {
+                        $shouldDownload = true;
+                    }
+                }
+
+                /*
+            IMPORTANT:
+            nse_created_at remains untouched.
+            */
+            }
+
+            /*
+        |--------------------------------------------------------------------------
+        | Download only if file & needed
+        |--------------------------------------------------------------------------
+        */
+            if ($shouldDownload && $type === 'File') {
+
+                $storagePath = storage_path(
+                    'app/nse/common/' .
+                        $today . '/' .
+                        $segment . '/' .
+                        ($parent !== 'root' ? $parent . '/' : '')
                 );
 
-                $batch = [];
+                if (!file_exists($storagePath)) {
+                    mkdir($storagePath, 0755, true);
+                }
+
+                $savePath = $storagePath . $name;
+
+                $nseCommanService->downloadFileFromApi(
+                    $authToken,
+                    $segment,
+                    $currentPath,
+                    $name,
+                    $savePath
+                );
             }
         }
 
-        // Insert remaining rows
-        if (!empty($batch)) {
-
-            NseCommanContent::upsert(
-                $batch,
-                ['path'],
-                ['size', 'nse_modified_at', 'updated_at']
-            );
-        }
-
-        // Rate limiting (important for NSE gateway)
-        usleep(config('nse.sleep_microseconds', 150000));
-
-        /**
-         * Dive into subfolders
-         */
+        /*
+    |--------------------------------------------------------------------------
+    | Recursive folder traversal
+    |--------------------------------------------------------------------------
+    */
         foreach ($apiResponse['data'] as $item) {
 
             if (($item['type'] ?? null) === 'Folder') {
 
                 $nextPath = $currentPath
-                    ? $currentPath . '/' . $item['name']
-                    : $item['name'];
+                    ? $currentPath . '/' . $this->sanitize($item['name'])
+                    : $this->sanitize($item['name']);
 
                 $this->syncFolderRecursive(
-                    $service,
+                    $nseCommanService,
                     $authToken,
                     $segment,
                     $nextPath
