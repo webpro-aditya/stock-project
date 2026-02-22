@@ -8,20 +8,41 @@ $parts = $folder ? explode('/', $folder) : [];
 $path = '';
 @endphp
 
+@section('style')
+<style>
+    #syncProgressWrapper {
+        width: 100%;
+            height: 5px;
+        margin: 0 !important;
+    }
+</style>
+@endsection
+
 @section('header-title')
 <span>NSE Member Segment</span>
 @endsection
 
 @section('header-actions')
-<div class="text-right">
+<div class="flex flex-col items-end gap-1.5">
     <button onclick="syncNow('{{ $segment }}', '{{ $folder }}')"
-        class="btn-sync flex items-center gap-2 text-sm font-semibold text-white bg-brand hover:bg-brand-hover px-3 py-2 rounded-lg transition-colors">
+        class="btn-sync flex items-center gap-2 text-sm font-semibold text-white bg-brand hover:bg-brand-hover px-4 py-2 rounded-lg shadow-sm transition-all active:scale-95 focus:ring-2 focus:ring-brand focus:ring-offset-1">
         <i data-lucide="refresh-cw" class="w-4 h-4"></i>
-        SYNC NOW
+        <span>SYNC NOW</span>
     </button>
-    @if ($lastSynced && $lastSynced != 'Never')
-    <div class="text-xs text-gray-500 mt-1">Last synced: {{ $lastSynced }}</div>
-    @endif
+
+
+    <div class="flex items-center gap-1.5 text-xs text-gray-500 font-medium mr-1">
+        @if($lastSynced && \Carbon\Carbon::parse($lastSynced)->isToday())
+        <span class="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_4px_rgba(34,197,94,0.6)]" title="Synced Today"></span>
+        @else
+        <span class="w-2 h-2 rounded-full bg-red-500" title="Synced Previously"></span>
+        @endif
+        <span>Last synced: 
+            @if ($lastSynced)
+                {{ \Carbon\Carbon::parse($lastSynced)->format('h:i a')}}
+            @endif
+        </span>
+    </div>
 </div>
 @endsection
 

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\SyncJob;
 use App\Models\NseCommanContent;
 use App\Jobs\SyncBseFileJob;
 use App\Jobs\SyncBseFolders;
@@ -42,8 +43,13 @@ class NSECommanController extends Controller
     public function getTodaySegmentFolder(Request $request, $segment, $folder)
     {
         $cacheKey = "nse_sync_" . Str::slug($segment . '_' . $folder . '_today');
-        $lastSynced = Cache::get($cacheKey . '_time');
-        $lastSyncedFormatted = $lastSynced ? Carbon::parse($lastSynced)->format('h:i:s A') : 'Never';
+        $lastSyncedCache = Cache::get($cacheKey . '_time');
+         $lastSyncedDb = SyncJob::select('updated_at')->where([
+            'type' => 'common',
+            'segment' => $segment
+        ])->first();
+        $lastSyncedFormatted = $lastSyncedDb
+            ? Carbon::parse($lastSyncedDb->updated_at)->format('Y-m-d h:i:s A') : '';
 
         $contents = NseCommanContent::where('segment', Str::upper($segment))
             ->where('parent_folder', $folder)
@@ -69,6 +75,20 @@ class NSECommanController extends Controller
 
     public function syncMemberSegment($segment)
     {
+        $existingSync = SyncJob::where('type', 'common')
+            ->where('segment', $segment)
+            ->whereDate('updated_at', Carbon::today())
+            ->first();
+
+        if ($existingSync) {
+            $existingSync->touch(); 
+        } else {
+            SyncJob::create([
+                'type' => 'common',
+                'segment' => $segment,
+            ]);
+        }
+
         SyncNseCommaonFolders::dispatch(
             $segment,
             ''

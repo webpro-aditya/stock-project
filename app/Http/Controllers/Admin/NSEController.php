@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\NseContent;
+use App\Models\SyncJob;
 use App\Jobs\SyncNseFileJob;
 use App\Jobs\SyncNseFolders;
 use App\Services\NSEService;
@@ -45,10 +46,13 @@ class NSEController extends Controller
         $today = Carbon::today();
 
         $cacheKey = "nse_sync_" . Str::slug($segment . '_' . $folder . '_today');
-        $lastSynced = Cache::get($cacheKey . '_time');
-        $lastSyncedFormatted = $lastSynced
-            ? Carbon::parse($lastSynced)->format('h:i:s A')
-            : 'Never';
+        $lastSyncedCache = Cache::get($cacheKey . '_time');
+        $lastSyncedDb = SyncJob::select('updated_at')->where([
+            'type' => 'member',
+            'segment' => $segment
+        ])->first();
+        $lastSyncedFormatted = $lastSyncedDb
+            ? Carbon::parse($lastSyncedDb->updated_at)->format('Y-m-d h:i:s A') : '';
 
         /*
     |--------------------------------------------------------------------------
@@ -125,6 +129,20 @@ class NSEController extends Controller
 
     public function syncMemberSegment($segment)
     {
+        $existingSync = SyncJob::where('type', 'member')
+            ->where('segment', $segment)
+            ->whereDate('updated_at', Carbon::today())
+            ->first();
+
+        if ($existingSync) {
+            $existingSync->touch(); 
+        } else {
+            SyncJob::create([
+                'type' => 'member',
+                'segment' => $segment,
+            ]);
+        }
+
         SyncNseFolders::dispatch(
             $segment,
             ''

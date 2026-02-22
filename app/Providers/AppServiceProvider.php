@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Schema;
 
 class AppServiceProvider extends ServiceProvider
@@ -40,6 +41,14 @@ class AppServiceProvider extends ServiceProvider
             }
 
             return $this;
+        });
+
+        Gate::define('viewPulse', function (User $user) {
+            // Return true if the user should have access.
+            // E.g., Restrict by a specific admin email:
+            return in_array($user->email, [
+                'your_admin_email@example.com',
+            ]);
         });
     }
 }

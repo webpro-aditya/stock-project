@@ -22,7 +22,7 @@
         <!-- /.login-logo -->
         <div class="card card-outline card-primary">
             <div class="card-header text-center">
-                <a href="../../index2.html" class="h1">
+                <a href="{{ route('home') }}" class="h1">
                     Extranet Sync
                 </a>
             </div>
