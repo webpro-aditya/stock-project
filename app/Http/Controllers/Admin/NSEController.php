@@ -43,7 +43,7 @@ class NSEController extends Controller
     {
         $segment = Str::upper($segment);
         $currentFolder = $request->query('folder') ?? 'root';
-        $today = Carbon::today();
+        $today = Carbon::yesterday();
 
         $cacheKey = "nse_sync_" . Str::slug($segment . '_' . $folder . '_today');
         $lastSyncedCache = Cache::get($cacheKey . '_time');
@@ -155,6 +155,31 @@ class NSEController extends Controller
     }
 
 
+    //  public function syncMemberSegment($segment)
+    // {
+        
+    //     $existingSync = SyncJob::where('type', 'member')
+    //         ->where('segment', $segment)
+    //         ->whereDate('updated_at', Carbon::today())
+    //         ->first();
+
+    //     if ($existingSync) {
+    //         $existingSync->touch();
+    //     } else {
+    //         SyncJob::create([
+    //             'type' => 'member',
+    //             'segment' => $segment,
+    //         ]);
+    //     }
+        
+
+    //     // 🔥 MASTER JOB ONLY
+    //     SyncSegmentJob::dispatch($segment);
+    //     return response()->json([
+    //         'success' => true,
+    //         'message' => 'NSE sync started sequentially.'
+    //     ]);
+    // }
     public function getArchiveSegmentFolder($segment, $folder)
     {
         $segment = Str::upper($segment);
@@ -247,6 +272,7 @@ class NSEController extends Controller
             // today | archive
 
             $today = now()->toDateString();
+            
             $fileRecord = NseContent::findOrFail($id);
 
             /*
@@ -263,7 +289,7 @@ class NSEController extends Controller
                     $fileRecord->parent_folder . '/' .
                     $fileRecord->name
                 );
-
+dd($storagePath);
                 if (!file_exists($storagePath)) {
                     return response()->json([
                         'success' => false,

@@ -35,9 +35,9 @@ class SyncNseCommonFileJob
         $shouldDownload = true;
         if ($shouldDownload) {
             $directory = dirname($relativePath);
-            if (!Storage::exists($directory)) {
-                Storage::makeDirectory($directory);
-            }
+            // if (!Storage::exists($directory)) {
+            //     Storage::makeDirectory($directory);
+            // }
 
             $folderParam = ($fileRecord->parent_folder === 'root' || $fileRecord->parent_folder === 'Root' || $fileRecord->parent_folder === '') ? '' : $fileRecord->parent_folder;
             $success = $nseService->downloadFileFromApi(

@@ -12,6 +12,7 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -19,9 +20,9 @@ class SyncNseCommaonFolders implements ShouldQueue, ShouldBeUnique
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public $timeout = 1800;
+    public $timeout = 2800; // 30 minutes
     public $tries = 3;
-    public $uniqueFor = 100;
+    public $uniqueFor = 10;
 
     private string $segment;
     private string $folder;
@@ -29,21 +30,38 @@ class SyncNseCommaonFolders implements ShouldQueue, ShouldBeUnique
     public function __construct(string $segment, string $folder = '')
     {
         $this->segment   = Str::upper($segment);
-
-        // 🔥 normalize once here
         $this->folder = $this->normalizePath($folder);
     }
 
     public function uniqueId()
     {
-        return $this->segment; // prevents duplicate crawlers
+        return $this->segment;
     }
 
-    public function handle(NSECommanService $nseCommanService)
+    private function updateProgress(int $current, int $total): void
     {
-        $authToken = $nseCommanService->getAuthToken();
+        $percentage = $total > 0 ? intval(($current / $total) * 100) : 0;
 
-        if ( !$authToken ) {
+        Cache::put("nse_sync_progress_{$this->segment}", [
+            'current' => $current,
+            'total' => $total,
+            'percentage' => $percentage,
+            'status' => 'running'
+        ], now()->addMinutes(60));
+    }
+
+    public function handle(NSECommanService $NSECommanService)
+    {
+        Cache::put("nse_sync_progress_{$this->segment}", [
+            'current' => 0,
+            'total' => 0,
+            'percentage' => 0,
+            'status' => 'starting'
+        ], now()->addMinutes(60));
+
+        $authToken = $NSECommanService->getAuthToken();
+
+        if (!$authToken) {
             Log::channel('syncron')->info("Starting NSE Member sync -- Login token Gen. Failed", [
                 'segment' => $this->segment,
                 'root' => $this->folder ?: '(root)'
@@ -51,13 +69,13 @@ class SyncNseCommaonFolders implements ShouldQueue, ShouldBeUnique
             return false;
         }
 
-        Log::channel('syncron')->info("Starting NSE Common sync", [
+        Log::channel('syncron')->info("Starting NSE Member sync", [
             'segment' => $this->segment,
             'root' => $this->folder ?: '(root)'
         ]);
 
         $this->syncFolderRecursive(
-            $nseCommanService,
+            $NSECommanService,
             $authToken,
             $this->segment,
             $this->folder
@@ -66,6 +84,13 @@ class SyncNseCommaonFolders implements ShouldQueue, ShouldBeUnique
         Log::channel('syncron')->info("NSE sync completed", [
             'segment' => $this->segment
         ]);
+
+        Cache::put("nse_sync_progress_{$this->segment}", [
+            'current' => 100,
+            'total' => 100,
+            'percentage' => 100,
+            'status' => 'completed'
+        ], now()->addMinutes(10));
     }
 
     /**
@@ -88,31 +113,32 @@ class SyncNseCommaonFolders implements ShouldQueue, ShouldBeUnique
         return trim($value);
     }
 
+
     private function syncFolderRecursive(
-        NSECommanService $service,
+        NSECommanService $NSECommanService,
         string $authToken,
         string $segment,
         string $currentPath = ''
     ): void {
 
-        // Prevent memory blow from query logging
         DB::connection()->disableQueryLog();
 
         $currentPath = $this->normalizePath($currentPath);
+        $today = now()->toDateString();
+        $parent = $currentPath ?: 'root';
 
         Log::channel('syncron')->info("Fetching folder", [
             'segment' => $segment,
-            'folderPath' => $currentPath ?: '(root)'
+            'folderPath' => $parent
         ]);
 
         $apiResponse = retry(3, function () use (
-            $service,
+            $NSECommanService,
             $authToken,
             $segment,
             $currentPath
         ) {
-
-            return $service->getFolderFilesList(
+            return $NSECommanService->getFolderFilesList(
                 $authToken,
                 $segment,
                 $currentPath
@@ -123,6 +149,16 @@ class SyncNseCommaonFolders implements ShouldQueue, ShouldBeUnique
             return;
         }
 
+        $totalItems = count($apiResponse['data']);
+
+        $progress = Cache::get("nse_sync_progress_{$this->segment}");
+        $currentCount = $progress['current'] ?? 0;
+
+        /*
+    |--------------------------------------------------------------------------
+    | Preload today's snapshot for this folder
+    |--------------------------------------------------------------------------
+    */
         $existingToday = NseCommanContent::where('segment', $segment)
             ->where('parent_folder', $parent)
             ->whereDate('created_at', $today)
@@ -211,14 +247,10 @@ class SyncNseCommaonFolders implements ShouldQueue, ShouldBeUnique
         | Download only if file & needed
         |--------------------------------------------------------------------------
         */
-            if ($shouldDownload && $type === 'File') {
+            // Inside your foreach loop where you download the file:
 
-                $storagePath = storage_path(
-                    'app/nse/common/' .
-                        $today . '/' .
-                        $segment . '/' .
-                        ($parent !== 'root' ? $parent . '/' : '')
-                );
+            if ($shouldDownload && $type === 'File') {
+                $storagePath = storage_path('app/nse/' . $today . '/' . $segment . '/' . ($parent !== 'root' ? $parent . '/' : ''));
 
                 if (!file_exists($storagePath)) {
                     mkdir($storagePath, 0755, true);
@@ -226,14 +258,29 @@ class SyncNseCommaonFolders implements ShouldQueue, ShouldBeUnique
 
                 $savePath = $storagePath . $name;
 
-                $nseCommanService->downloadFileFromApi(
-                    $authToken,
-                    $segment,
-                    $currentPath,
-                    $name,
-                    $savePath
-                );
+                // Example of wrapping the download in a try-catch to handle 401s
+                try {
+                 //   $NSECommanService->downloadFileFromApi($authToken, $segment, $currentPath, $name, $savePath);
+                } catch (\Exception $e) {
+                    // Assuming your service throws an exception on 401. 
+                    // Adjust the condition based on how your service returns HTTP status codes.
+                    if ($e->getCode() == 401) {
+                        Log::channel('syncron')->warning("Token expired mid-download. Refreshing token.");
+
+                        // Fetch a new token
+                        $authToken = $NSECommanService->getAuthToken();
+
+                        // Retry the download with the new token
+                      //  $NSECommanService->downloadFileFromApi($authToken, $segment, $currentPath, $name, $savePath);
+                    } else {
+                        // Rethrow or log other errors (like the 504s)
+                        Log::channel('syncron')->error("Download failed: " . $e->getMessage());
+                    }
+                }
             }
+
+            $currentCount++;
+            $this->updateProgress($currentCount, $totalItems);
         }
 
         /*
@@ -250,7 +297,7 @@ class SyncNseCommaonFolders implements ShouldQueue, ShouldBeUnique
                     : $this->sanitize($item['name']);
 
                 $this->syncFolderRecursive(
-                    $nseCommanService,
+                    $NSECommanService,
                     $authToken,
                     $segment,
                     $nextPath

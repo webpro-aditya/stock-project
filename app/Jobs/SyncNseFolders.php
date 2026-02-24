@@ -260,7 +260,7 @@ class SyncNseFolders implements ShouldQueue, ShouldBeUnique
 
                 // Example of wrapping the download in a try-catch to handle 401s
                 try {
-                    $nseService->downloadFileFromApi($authToken, $segment, $currentPath, $name, $savePath);
+                 //   $nseService->downloadFileFromApi($authToken, $segment, $currentPath, $name, $savePath);
                 } catch (\Exception $e) {
                     // Assuming your service throws an exception on 401. 
                     // Adjust the condition based on how your service returns HTTP status codes.
@@ -271,7 +271,7 @@ class SyncNseFolders implements ShouldQueue, ShouldBeUnique
                         $authToken = $nseService->getAuthToken();
 
                         // Retry the download with the new token
-                        $nseService->downloadFileFromApi($authToken, $segment, $currentPath, $name, $savePath);
+                      //  $nseService->downloadFileFromApi($authToken, $segment, $currentPath, $name, $savePath);
                     } else {
                         // Rethrow or log other errors (like the 504s)
                         Log::channel('syncron')->error("Download failed: " . $e->getMessage());

@@ -26,6 +26,7 @@ class Kernel extends ConsoleKernel
     {
         $schedule->command('run:nsemember')
             ->dailyAt('05:00')
+            ->everyMinute()
             ->timezone('Asia/Kolkata')
             ->withoutOverlapping()
             ->onOneServer();

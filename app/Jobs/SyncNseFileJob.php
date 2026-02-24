@@ -87,9 +87,9 @@ class SyncNseFileJob
 
             $directory = dirname($relativePath);
 
-            if (!Storage::exists($directory)) {
-                Storage::makeDirectory($directory);
-            }
+            // if (!Storage::exists($directory)) {
+            //     Storage::makeDirectory($directory);
+            // }
 
             $folderParam = (
                 $fileRecord->parent_folder === 'root' ||
