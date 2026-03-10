@@ -1,5 +1,6 @@
 <?php
 
+use Illuminate\Support\Facades\DB;
 
 if (!function_exists('getDateFormatted')) {
     /**
@@ -25,6 +26,20 @@ if (!function_exists('encryptPassword')) {
         $key = base64_decode($base64Key);
         $encrypted = openssl_encrypt($plainText, 'aes-256-ecb', $key, OPENSSL_RAW_DATA);
         return base64_encode($encrypted);
+    }
+}
+
+
+if (!function_exists('saveSyncLog')) {
+    function saveSyncLog(string $type, string $segment, string $statusCode, string $responseCode, string $message = '')
+    {
+        DB::table('sync_logs')->insert([
+            'type' => $type,
+            'segment' => $segment,
+            'statuscode' => $statusCode,
+            'responsecode' => $responseCode,
+            'message' => $message
+        ]);
     }
 }
 

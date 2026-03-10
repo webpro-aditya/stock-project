@@ -87,6 +87,7 @@ class NSECommanService
                 'folder' => $folder,
                 'url' => $url
             ]);
+            saveSyncLog('common', $segment, '400', '', 'INVALID URL GENERATED. Folder: ' . $folder . ', URL: ' . $url);
         }
 
 
@@ -117,16 +118,20 @@ class NSECommanService
 
         if ($err) {
             Log::error("NSE cURL Error: " . $err);
+            saveSyncLog('common', $segment, $info['http_code'], '', "NSE cURL Error: " . $err);
             return ['status' => 'error', 'message' => $err];
         }
 
         if ($info['http_code'] !== 200) {
+            Session::put('common_api_success', false);
             Log::warning("NSE API non-200 response", [
                 'code' => $info['http_code'],
                 'body' => $response
             ]);
+            saveSyncLog('common', $segment, $info['http_code'], '', "NSE API non-200 response");
+        } else {
+            Session::put('common_api_success', true);
         }
-
         return json_decode($response, true);
     }
 
@@ -177,41 +182,48 @@ class NSECommanService
         if (isset($creds['cookie_abck'])) $cookieString .= '; _abck=' . $creds['cookie_abck'];
         if (isset($creds['cookie_bm_sz'])) $cookieString .= '; bm_sz=' . $creds['cookie_bm_sz'];
 
-        $fp = fopen($savePath, 'w+');
+        $fp   = fopen($savePath, 'wb+');
         $curl = curl_init();
 
         curl_setopt_array($curl, array(
-            CURLOPT_URL => $url,
-            CURLOPT_FILE => $fp,
-            CURLOPT_ENCODING => '',
-            CURLOPT_MAXREDIRS => 10,
-            CURLOPT_TIMEOUT => 0,
+            CURLOPT_URL            => $url,
+            CURLOPT_FILE           => $fp,
+            CURLOPT_MAXREDIRS      => 10,
+            CURLOPT_TIMEOUT        => 0,
             CURLOPT_FOLLOWLOCATION => true,
-            CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
-            CURLOPT_CUSTOMREQUEST => 'GET',
+            CURLOPT_HTTP_VERSION   => CURL_HTTP_VERSION_1_1,
+            CURLOPT_CUSTOMREQUEST  => 'GET',
             CURLOPT_SSL_VERIFYPEER => false,
-            CURLOPT_USERAGENT => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            CURLOPT_HTTPHEADER => array(
+            CURLOPT_USERAGENT      => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            CURLOPT_HTTPHEADER     => array(
                 'Authorization: Bearer ' . $authToken,
-                'Cookie: ' . $cookieString
+                'Cookie: ' . $cookieString,
+                'Accept-Encoding: identity',
             ),
         ));
 
         curl_exec($curl);
-        $httpCode = curl_getinfo($curl, CURLINFO_HTTP_CODE);
-        $err = curl_error($curl);
+        $httpCode    = curl_getinfo($curl, CURLINFO_HTTP_CODE);
+        $contentType = curl_getinfo($curl, CURLINFO_CONTENT_TYPE);
+        $err         = curl_error($curl);
 
         curl_close($curl);
         fclose($fp);
 
         if ($err) {
-            Log::error("NSE cURL Error: " . $err);
+            Log::error("NSE Common cURL Error: " . $err);
+            saveSyncLog('common', $segment, '400', '', 'NSE Common cURL Error: ' . $err);
+            if (file_exists($savePath)) unlink($savePath);
+            return false;
+        }
+
+        if (!empty($contentType) && str_contains($contentType, 'text/html')) {
+            Log::error("NSE Common returned HTML error page [HTTP $httpCode]");
             if (file_exists($savePath)) unlink($savePath);
             return false;
         }
 
         if ($httpCode >= 200 && $httpCode < 300 && file_exists($savePath) && filesize($savePath) > 0) {
-
             $processingPath = $savePath;
 
             if (str_ends_with($processingPath, '.gz')) {
@@ -219,68 +231,129 @@ class NSECommanService
             }
 
             $extension = strtolower(pathinfo($processingPath, PATHINFO_EXTENSION));
-
             if (in_array($extension, ['lis', 'txt', 'csv', 'dat'])) {
                 $this->convertPipeToCsv($processingPath);
             }
 
-            return true;
+            return $processingPath;
         }
 
         if (file_exists($savePath)) unlink($savePath);
-        Log::error("NSE Download Failed [HTTP $httpCode]");
+        Log::error("NSE Common Download Failed [HTTP $httpCode]");
+        saveSyncLog('common', $segment, $httpCode, '', "NSE Common Download Failed [HTTP $httpCode]");
         return false;
     }
 
+
     private function decompressGzFile($filePath)
     {
-        $bufferSize = 4096;
-        // New filename is the original path MINUS '.gz'
+        if (!file_exists($filePath) || filesize($filePath) === 0) {
+            Log::error("GZ Decompress [common]: File missing or empty: $filePath");
+            return $filePath;
+        }
+
+        $handle = fopen($filePath, 'rb');
+        $magic  = fread($handle, 2);
+        fclose($handle);
+
+        if ($magic !== "\x1f\x8b") {
+            Log::error("GZ Decompress [common]: Not a valid gzip file. Magic: " . bin2hex($magic) . " | $filePath");
+            return $filePath;
+        }
+
         $outFileName = str_replace('.gz', '', $filePath);
 
         $file = gzopen($filePath, 'rb');
-        if (!$file) return $filePath; // Return original if failed
+        if (!$file) {
+            Log::error("GZ Decompress [common]: gzopen() failed for: $filePath");
+            return $filePath;
+        }
 
         $outFile = fopen($outFileName, 'wb');
+        if (!$outFile) {
+            Log::error("GZ Decompress [common]: Cannot create output file: $outFileName");
+            gzclose($file);
+            return $filePath;
+        }
 
+        $bufferSize = 65536;
         while (!gzeof($file)) {
-            fwrite($outFile, gzread($file, $bufferSize));
+            $chunk = gzread($file, $bufferSize);
+            if ($chunk === false) {
+                Log::error("GZ Decompress [common]: gzread() failed mid-stream");
+                break;
+            }
+            fwrite($outFile, $chunk);
         }
 
         fclose($outFile);
         gzclose($file);
 
-        // Delete the original .gz file
-        if (file_exists($filePath)) {
-            unlink($filePath);
+        if (!file_exists($outFileName) || filesize($outFileName) === 0) {
+            Log::error("GZ Decompress [common]: Output file empty or missing: $outFileName");
+            return $filePath;
         }
 
-        // Return the new clean filename (e.g., trade.txt)
+        unlink($filePath);
         return $outFileName;
     }
 
+
     private function convertPipeToCsv($filePath)
     {
-        $inputHandle = fopen($filePath, 'r');
-        if ($inputHandle === false) return;
+        if (!file_exists($filePath) || filesize($filePath) === 0) {
+            Log::error("convertPipeToCsv [common]: File missing or empty: $filePath");
+            return;
+        }
 
-        $tempPath = $filePath . '.tmp';
+        $peek = fopen($filePath, 'r');
+        if (!$peek) {
+            Log::error("convertPipeToCsv [common]: Cannot open file: $filePath");
+            return;
+        }
+        $firstLine = fgets($peek);
+        fclose($peek);
+
+        if ($firstLine === false || strpos($firstLine, '|') === false) {
+            Log::info("convertPipeToCsv [common]: No pipes found, skipping: $filePath");
+            return;
+        }
+
+        $inputHandle  = fopen($filePath, 'r');
+        $tempPath     = $filePath . '.tmp';
         $outputHandle = fopen($tempPath, 'w');
 
+        if (!$inputHandle || !$outputHandle) {
+            Log::error("convertPipeToCsv [common]: Failed to open file handles for: $filePath");
+            return;
+        }
+
+        $lineCount = 0;
         while (($line = fgets($inputHandle)) !== false) {
+            $line   = rtrim($line, "\r\n");
+            $fields = explode('|', $line);
 
-            // Replace pipe with comma
-            $line = str_replace('|', ',', $line);
+            $fields = array_map(function ($field) {
+                $field = str_replace('"', '""', $field);
+                if (strpos($field, ',') !== false || strpos($field, '"') !== false || strpos($field, "\n") !== false) {
+                    $field = '"' . $field . '"';
+                }
+                return $field;
+            }, $fields);
 
-            // Remove unwanted wrapping quotes
-            $line = trim($line);
-
-            fwrite($outputHandle, $line . PHP_EOL);
+            fwrite($outputHandle, implode(',', $fields) . "\n");
+            $lineCount++;
         }
 
         fclose($inputHandle);
         fclose($outputHandle);
 
-        rename($tempPath, $filePath);
+        if (!rename($tempPath, $filePath)) {
+            Log::error("convertPipeToCsv [common]: Failed to rename temp to: $filePath");
+            if (file_exists($tempPath)) unlink($tempPath);
+            return;
+        }
+
+        Log::info("convertPipeToCsv [common]: Converted $lineCount lines in $filePath");
     }
 }

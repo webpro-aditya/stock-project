@@ -32,6 +32,7 @@
                     <a href="{{ route('nse.segment.folder.today', ['segment' => 'co', 'folder' => 'root']) }}" class="w-full text-left py-2 text-xs hover:text-white text-slate-500 block border-l border-slate-700 pl-4 hover:border-brand transition-colors">CO</a>
                     <a href="{{ route('nse.segment.folder.today', ['segment' => 'cd', 'folder' => 'root']) }}" class="w-full text-left py-2 text-xs hover:text-white text-slate-500 block border-l border-slate-700 pl-4 hover:border-brand transition-colors">CD</a>
                     <a href="{{ route('nse.segment.folder.today', ['segment' => 'fo', 'folder' => 'root']) }}" class="w-full text-left py-2 text-xs hover:text-white text-slate-500 block border-l border-slate-700 pl-4 hover:border-brand transition-colors">FO</a>
+                    {{--<a href="{{ route('nse.logs.index', ['type' => 'member', 'segment' => 'cm']) }}" class="w-full text-left py-2 text-xs hover:text-white text-slate-500 block border-l border-slate-700 pl-4 hover:border-brand transition-colors">Logs</a>--}}
                 </div>
             </div>
 
@@ -49,6 +50,7 @@
                     <a href="{{ route('nse.common.segment.folder.today', ['segment' => 'co', 'folder' => 'root']) }}" class="w-full text-left py-2 text-xs hover:text-white text-slate-500 block border-l border-slate-700 pl-4 hover:border-brand transition-colors">CO</a>
                     <a href="{{ route('nse.common.segment.folder.today', ['segment' => 'cd', 'folder' => 'root']) }}" class="w-full text-left py-2 text-xs hover:text-white text-slate-500 block border-l border-slate-700 pl-4 hover:border-brand transition-colors">CD</a>
                     <a href="{{ route('nse.common.segment.folder.today', ['segment' => 'fo', 'folder' => 'root']) }}" class="w-full text-left py-2 text-xs hover:text-white text-slate-500 block border-l border-slate-700 pl-4 hover:border-brand transition-colors">FO</a>
+                    {{--<a href="{{ route('nse.logs.index', ['type' => 'common', 'segment' => 'cm']) }}" class="w-full text-left py-2 text-xs hover:text-white text-slate-500 block border-l border-slate-700 pl-4 hover:border-brand transition-colors">Logs</a>--}}
                 </div>
             </div>
         </div>
@@ -75,7 +77,7 @@
     <div class="p-4 border-t border-slate-800">
         <div class="flex items-center justify-between">
             <div class="text-sm">
-                <p class="font-semibold text-slate-200">Welcome, {{ auth()->user()->name }}</p>
+                <p class="font-semibold text-slate-200">Welcome, {{ auth()->user()->name ?? 'Admin' }}</p>
             </div>
             <form action="{{ route('admin.logout') }}" method="post">
                 @csrf

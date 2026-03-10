@@ -12,7 +12,20 @@ $path = '';
 <span>NSE Common Segment</span>
 @endsection
 
+@section('header-timer')
+ <strong style="font-size: 12px; color: red;" id="countdown"></strong>
+@endsection
 @section('header-actions')
+   @if(session('success'))
+        <div id="toast" class="toast-success">
+        </div>
+    @endif
+
+    @if(session('error'))
+        <div id="toast" class="toast-error">
+        </div>
+    @endif
+
 <div class="flex flex-col items-end gap-1.5">
     <button onclick="syncNow('{{ $segment }}', '{{ $folder }}')"
         class="btn-sync flex items-center gap-2 text-sm font-semibold text-white bg-brand hover:bg-brand-hover px-4 py-2 rounded-lg shadow-sm transition-all active:scale-95 focus:ring-2 focus:ring-brand focus:ring-offset-1">
@@ -22,9 +35,9 @@ $path = '';
 
     <div class="flex items-center gap-1.5 text-xs text-gray-500 font-medium mr-1">
         @if($lastSynced && \Carbon\Carbon::parse($lastSynced)->isToday())
-        <span class="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_4px_rgba(34,197,94,0.6)]" title="Synced Today"></span>
+        <span class="w-2 h-2 rounded-full bg-yellow-500 shadow-[0_0_4px_rgba(34,197,94,0.6)]" title="Synced Today"></span>
         @else
-        <span class="w-2 h-2 rounded-full bg-red-500" title="Synced Previously"></span>
+        <span class="w-2 h-2 rounded-full bg-yellow-500" title="Synced Previously"></span>
         @endif
         <span>Last synced: 
             @if ($lastSynced)
@@ -44,7 +57,7 @@ $path = '';
             </li>
             <li class="text-gray-400">/</li>
             <li>
-                <a href="{{ route('nse.segment.folder.today', [
+                <a href="{{ route('nse.common.segment.folder.today', [
                                 'segment' => $segment,
                                 'folder' => 'root'
                             ]) }}"
@@ -69,7 +82,7 @@ $path = '';
             <li class="text-gray-400">/</li>
 
             <li>
-                <a href="{{ route('nse.segment.folder.today', [
+                <a href="{{ route('nse.common.segment.folder.today', [
                                     'segment' => $segment,
                                     'folder' => 'root' // Base route param stays 'root'
                                 ]) }}?folder={{ $accumulatedPath }}"
@@ -80,98 +93,119 @@ $path = '';
             @endforeach
         </ol>
     </nav>
-    <div class="bg-white rounded-lg shadow-sm">
+    <div class="bg-white rounded-lg shadow-lg">
         <div class="px-6 py-3 border-b border-gray-200">
             <div class="flex items-center gap-3 text-lg font-bold text-gray-900">
                 <i data-lucide="sun" class="w-6 h-6 text-amber-500"></i>
-                Today's Activity
+                All Activity
             </div>
         </div>
 
-        <div class="relative overflow-x-auto" style="max-height: 60vh;">
-            <table class="w-full text-sm text-left">
+        <div class="relative overflow-x-auto">
+            <table class="text-sm NseSegmentTable text-left"@if($contents->count() > 0) id="activityTable" @endif>
                 <thead class="text-xs text-gray-700 font-bold uppercase bg-gray-100 sticky top-0">
                     <tr>
                         <th scope="col" class="px-4 py-3 w-12">
                             <input type="checkbox" onchange="toggleAll(this)"
                                 class="w-4 h-4 custom-checkbox rounded border-gray-300">
                         </th>
-                        <th scope="col" class="px-6 py-3">File Name</th>
-                        <th scope="col" class="px-6 py-3">Created</th>
-                        <th scope="col" class="px-6 py-3">Last Updated</th>
-                        <th scope="col" class="px-6 py-3 text-right">Action</th>
+                        <th scope="col" class="px-6 py-3" style="display: none;">Type</th>
+                        <th scope="col" class="px-6 py-3 folder_col">Folder / File Name</th>
+                        <th scope="col" class="px-6 py-3 CreatedDate">Created</th>
+                        <th scope="col" class="px-6 py-3 LastUpdate">Last Updated</th>
+                        <th scope="col" class="px-6 py-3 text-right action_col">Action</th>
                     </tr>
                 </thead>
                 <tbody>
                     @forelse($contents as $item)
-                    @php
-                    $isFolder = $item->type == 'Folder';
-                    $url = 'folder=' . $item->parent_folder .'/'. $item->name;
-                    $url = str_replace('root/', '', $url);
-                    $isModified = $item->created_at->ne($item->nse_modified_at);
-                    $currentPath = url()->current();
-                    @endphp
+                        @php
+                            $isFolder = $item->type == 'Folder';
+                            $url = 'folder=' . $item->parent_folder .'/'. $item->name;
+                            $url = str_replace('root/', '', $url);
+                            $isModified = false;
+                            if ($item->nse_created_at && $item->nse_modified_at) {
+                                // Check 1: Was it modified after it was created?
+                                $afterCreation = $item->nse_modified_at->gt($item->nse_created_at);
+                                
+                                // Check 2: Was it modified today?
+                                $modifiedToday = $item->nse_modified_at->isToday();
+
+                                $isModified = $afterCreation && $modifiedToday;
+                            }
+                            $currentPath = url()->current();
+                        @endphp
                     <tr class="bg-white border-b border-gray-200 hover:bg-gray-50">
                         <td class="p-4">
-                            <input type="checkbox" value="{{ $item->id }}" onchange="checkSelection()" class="row-selector w-4 h-4 custom-checkbox rounded border-gray-300"
-                                @if ($isFolder) disabled @endif>
+                            @if (!$isFolder)
+                            <input type="checkbox" value="{{ $item->id }}" onchange="checkSelection()" class="row-selector w-4 h-4 custom-checkbox rounded border-gray-300">
+                            @endif
                         </td>
-                        <td scope="row" class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">
-                            <a href="{{ $currentPath }}?{{$url}}" class="flex items-center gap-3">
+                        <td class="px-6 py-4 text-gray-700 font-medium" style="display: none;">
+                            {{ $item->type }}
+                        </td>
+                        <td scope="row" class="px-6 py-4 font-medium text-gray-900 flex items-center gap-3 folder_col">
+                            {{--<a href="{{ ($isFolder) ? $currentPath : '#' }}?{{($isFolder) ? $url : ''}}" class="flex items-center gap-3">--}}
                                 <div
                                     class="w-8 h-8 flex items-center justify-center {{ $isFolder ? 'bg-indigo-100 rounded-lg' : 'bg-indigo-100 rounded-lg' }}">
                                     <i data-lucide="{{ $isFolder ? 'folder' : 'file' }}" class="w-5 h-5 {{ $isFolder ? 'text-yellow-500 fill-yellow-500/20' : 'text-indigo-600' }}"></i>
                                 </div>
-                                {{ $item->name }}
-                            </a>
+                                <span class="break-all">{{ $item->name }}</span>
+                            {{--</a>--}}
                         </td>
                         <td class="px-6 py-4 text-gray-700 font-medium">
-                            {{ $item->nse_modified_at ? $item->nse_modified_at->format('d M H:i') : '' }}
+                            {{ $item->nse_created_at ? $item->nse_created_at->format('Y-m-d h:i a') : '' }}
                         </td>
+                        
                         <td class="px-6 py-4 text-gray-700 font-medium">
                             <div class="flex flex-col">
-                                <span>{{ $item->nse_modified_at ? $item->nse_modified_at->format('d M H:i') : '' }}</span>
-                                {{--@if ($isModified)
-                                <span class="flex items-center gap-1.5 text-xs text-amber-600 font-semibold mt-0.5">
-                                    <i data-lucide="alert-circle" class="w-3.5 h-3.5"></i>
-                                    Modified
-                                </span>
-                                @endif--}}
+                                <span>{{ $item->nse_modified_at ? $item->nse_modified_at->format('Y-m-d h:i a') : '' }}</span>
+                                @if ($isModified)
+                                    <span class="flex items-center gap-1.5 text-xs text-amber-600 font-semibold mt-0.5">
+                                        <i data-lucide="alert-circle" class="w-3.5 h-3.5"></i>
+                                        Modified
+                                    </span>
+                                @else
+                                    @if($modifiedToday)
+                                        <span class="flex items-center gap-1.5 text-xs text-amber-600 font-semibold mt-0.5">
+                                            <i data-lucide="alert-circle" class="w-3.5 h-3.5"></i>
+                                            New
+                                        </span>
+                                    @endif
+                                @endif
                             </div>
                         </td>
-                        <td class="px-6 py-4 text-right">
-                            @if (!$isFolder)
-                            <button onclick="triggerDownload(this, {{ $item->id }})"
-                                class="font-semibold text-sm text-gray-700 bg-white border border-gray-300 hover:bg-gray-100 px-4 py-2 rounded-lg transition-colors">Download</button>
-                            @else
-                            <a href="{{ $currentPath }}?{{$url}}"
-                                class="font-semibold text-sm text-gray-700 bg-white border border-gray-300 hover:bg-gray-100 px-4 py-2 rounded-lg transition-colors">Open</a>
-                            @endif
+                        <td class="px-6 py-4 text-left">
+                            <div class="flex items-center gap-3">
+                                @if (!$isFolder)
+                                    {{-- Download Button --}}
+                                    <button onclick="triggerDownload(this, {{ $item->id }})"
+                                        class="inline-flex items-center font-semibold text-sm text-gray-700 bg-white border border-gray-300 hover:bg-gray-100 px-4 py-2 rounded-lg transition-colors download_open">
+                                        <i data-lucide="download" class="w-4 h-4 mr-2"></i>
+                                        Download
+                                    </button>
+                                @else
+                                    {{-- Open Folder Link --}}
+                                    <a href="{{ $currentPath }}?{{ $url }}"
+                                        class="inline-flex items-center font-semibold text-sm text-gray-700 bg-white border border-gray-300 hover:bg-gray-100 px-4 py-2 rounded-lg transition-colors download_open">
+                                        <i data-lucide="folder-open" class="w-4 h-4 mr-2"></i>
+                                        Open
+                                    </a>
+                                @endif
+                            </div>
                         </td>
                     </tr>
                     @empty
                     <tr>
                         <td colspan="5" class="text-center py-16 text-gray-500">
                             <i data-lucide="cloud-off" class="w-12 h-12 mx-auto text-gray-300"></i>
-                            <p class="mt-4 text-lg font-semibold text-gray-600">No activity found for today.</p>
-                            <p class="text-sm">Check back later or sync to fetch the latest files.</p>
+                            <p class="mt-4 text-lg font-semibold text-gray-600">No activity found.</p>
+                            <p class="text-sm">Sync to fetch the latest files.</p>
                         </td>
                     </tr>
                     @endforelse
                 </tbody>
             </table>
         </div>
-    </div>
-    
-    <div class="text-center py-4 border-t border-gray-100">
-        <a href="{{ route('nse.common.segment.archives', ['segment' => $segment, 'folder' => $folder]) }}"
-            class="inline-flex flex-col items-center gap-1 text-xs font-bold text-gray-500 uppercase tracking-wider hover:text-brand transition-colors">
-            <div
-                class="w-10 h-10 flex items-center justify-center rounded-full bg-gray-200 group-hover:bg-brand-light shadow-sm border border-gray-200 transition-colors">
-                <i data-lucide="arrow-up" class="w-5 h-5"></i>
-            </div>
-            Load Archive History
-        </a>
     </div>
 </main>
 
@@ -196,6 +230,7 @@ $path = '';
 
 @section('script')
 <script>
+    
     const Toast = Swal.mixin({
         toast: true,
         position: 'top-end',
@@ -215,7 +250,7 @@ $path = '';
             `<i data-lucide="loader-circle" class="w-4 h-4 animate-spin mr-2"></i>`;
         lucide.createIcons();
 
-        const url = "{{ route('nse.file.prepare', ['id' => ':id']) }}".replace(':id', id);
+        const url = "{{ route('nse.common.file.prepare', ['id' => ':id']) }}".replace(':id', id);
 
         fetch(url, {
                 method: 'GET',
@@ -237,17 +272,17 @@ $path = '';
                         title: 'Downloading...'
                     });
 
-                    btn.innerHTML = `<i data-lucide="check" class="w-4 h-4 mr-2"></i>`;
+                    btn.innerHTML = `<i data-lucide="check-circle" class="w-5 h-5 text-success"></i>&nbsp;Downloaded`;
                     lucide.createIcons();
 
                     window.location.href = data.url;
 
-                    setTimeout(() => {
-                        btn.disabled = false;
-                        btn.innerHTML = originalContent;
-                    }, 2000);
+                    // setTimeout(() => {
+                    //     btn.disabled = false;
+                    //     btn.innerHTML = originalContent;
+                    // }, 2000);
                 } else {
-                    throw new Error(data.message || 'Download failed');
+                    throw new Error('Download failed. Please Retry after some time.');
                 }
             })
             .catch(error => {
@@ -255,8 +290,11 @@ $path = '';
 
                 Toast.fire({
                     icon: 'error',
-                    title: 'Download Failed',
-                    text: error.message
+                    title: 'Download Failed.',
+                    text: 'Please Retry after some time.',
+                    timer: 5000,
+                    timerProgressBar: true,
+                    showConfirmButton: false
                 });
 
                 btn.innerHTML = `<i data-lucide="x" class="w-4 h-4 mr-2"></i>`;
@@ -270,6 +308,30 @@ $path = '';
     }
 
     function syncNow(segment, folder) {
+        window.location.reload();
+        return;
+        const lastSynced = new Date();
+        const target = new Date(lastSynced.getTime() + 30 * 60 * 1000);
+
+        const timer = setInterval(() => {
+
+            const now = new Date().getTime();
+            const distance = target - now;
+
+            if (distance <= 0) {
+                clearInterval(timer);
+                document.getElementById("countdown").innerHTML = "";
+                return;
+            }
+
+            const minutes = Math.floor(distance / (1000 * 60));
+            const seconds = Math.floor((distance % (1000 * 60)) / 1000);
+
+            document.getElementById("countdown").innerHTML = "Sync Countdown Timer: " +
+                minutes.toString().padStart(2,'0') + ":" +
+                seconds.toString().padStart(2,'0');
+
+        }, 1000);
         const btn = document.querySelector('.btn-sync');
         const originalHtml = btn.innerHTML;
 
@@ -296,7 +358,7 @@ $path = '';
                         icon: 'info',
                         title: 'Refreshing the page...'
                     });
-                    setTimeout(() => window.location.reload(), 1000);
+                    // setTimeout(() => window.location.reload(), 1000);
                 } else {
                     Toast.fire({
                         icon: 'error',
@@ -344,21 +406,8 @@ $path = '';
         checkSelection();
     }
 
-    function updateTime() {
-        const timeElement = document.getElementById('current-time');
-        if (timeElement) {
-            const now = new Date();
-            const hours = now.getHours().toString().padStart(2, '0');
-            const minutes = now.getMinutes().toString().padStart(2, '0');
-            const seconds = now.getSeconds().toString().padStart(2, '0');
-            timeElement.innerText = `${hours}:${minutes}:${seconds}`;
-        }
-    }
-
-    setInterval(updateTime, 1000);
-    updateTime();
-
     function downloadSelected() {
+        const selectedCheckboxes = document.querySelectorAll('.row-selector:checked');
         const selectedIds = Array.from(document.querySelectorAll('.row-selector:checked'))
             .map(cb => cb.value);
 
@@ -399,7 +448,16 @@ $path = '';
                 if (data.success) {
                     window.location.href = data.url;
 
-                    btn.innerHTML = '<i data-lucide="check" class="w-4 h-4 mr-2"></i>';
+                    selectedCheckboxes.forEach(cb => {
+                        const row = cb.closest('tr');
+                        if (row) {
+                            const rowDownloadBtn = row.querySelector('button[onclick*="triggerDownload"]');
+                            if (rowDownloadBtn) {
+                                rowDownloadBtn.innerHTML = `<i data-lucide="check-circle" class="w-5 h-5 text-success"></i>&nbsp;Downloaded`;
+                            }
+                        }
+                    });
+
                     lucide.createIcons();
 
                     Toast.fire({
@@ -414,7 +472,7 @@ $path = '';
                         clearSelection();
                     }, 2000);
                 } else {
-                    throw new Error(data.message || 'Download preparation failed');
+                    throw new Error('Download failed. Please Retry after some time.');
                 }
             })
             .catch(error => {
@@ -423,7 +481,10 @@ $path = '';
                 Toast.fire({
                     icon: 'error',
                     title: 'Download Failed',
-                    text: error.message
+                    text: 'Please Retry after some time.',
+                    timer: 5000,
+                    timerProgressBar: true,
+                    showConfirmButton: false
                 });
 
                 btn.disabled = false;

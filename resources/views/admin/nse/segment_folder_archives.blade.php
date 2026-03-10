@@ -133,12 +133,12 @@
                     @include('admin.nse.partials.archive-tree-node-bulk', [
                     'name' => $name,
                     'node' => $node,
-                    'depth' => 0
+                    'depth' => 0,
+                    'archiveDate' => $date
                     ])
                     @endforeach
                 </div>
             </div>
-
         </div>
 
         @empty
@@ -191,8 +191,8 @@
 
         </div>
     </div>
-</div>
-@endsection
+    </div>
+    @endsection
 
 
     @section('script')
@@ -207,7 +207,7 @@
             timerProgressBar: true
         });
 
-        function triggerDownload(btn, id) {
+        function triggerDownload(btn, id, archiveDate) {
 
             const originalText = btn.innerText;
             btn.disabled = true;
@@ -215,20 +215,20 @@
             lucide.createIcons();
 
             const url = "{{ route('nse.file.prepare', ['id' => ':id']) }}"
-                .replace(':id', id) + '?source=archive';
+                .replace(':id', id) +
+                '?source=archive&date=' +
+                encodeURIComponent(archiveDate);
 
             fetch(url, {
                     method: 'GET'
                 })
                 .then(response => response.json())
                 .then(data => {
-
                     if (data.success) {
-                        window.location.href = data.url;
+                        window.location.href = data.url+'?archiveDate='+archiveDate;
                     } else {
                         throw new Error(data.message);
                     }
-
                 })
                 .catch(error => {
                     Toast.fire({

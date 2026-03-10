@@ -9,6 +9,7 @@ use Illuminate\Queue\SerializesModels;
 use App\Models\NseContent;
 use App\Services\NSEService;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 
 class SyncNseFileJob
@@ -17,87 +18,72 @@ class SyncNseFileJob
 
     protected $fileId;
     protected $authToken;
-    protected $source; // today | archive
+    protected $source;
+    protected $archiveDate;
 
-    public function __construct($fileId, $authToken = null, $source = 'today')
+    public function __construct($fileId, $authToken = null, $source = 'today', $archiveDate = '')
     {
-        $this->fileId = $fileId;
-        $this->authToken = $authToken;
-        $this->source = $source;
+        $this->fileId      = $fileId;
+        $this->authToken   = $authToken;
+        $this->source      = $source;
+        $this->archiveDate = $archiveDate;
     }
 
     public function handle(NSEService $nseService)
     {
         $fileRecord = NseContent::findOrFail($this->fileId);
 
-        $dateFolder = Carbon::parse($fileRecord->created_at)->format('Y-m-d');
+        /*
+        |--------------------------------------------------------------------------
+        | Determine Date Folder
+        |--------------------------------------------------------------------------
+        */
+        $dateFolder = $this->source === 'archive' && $this->archiveDate
+            ? Carbon::parse($this->archiveDate)->format('Y-m-d')
+            : Carbon::parse($fileRecord->created_at)->format('Y-m-d');
 
-        $relativePath = "nse/{$dateFolder}/{$fileRecord->segment}/{$fileRecord->parent_folder}/{$fileRecord->name}";
-        $absolutePath = Storage::path($relativePath);
+        if ($fileRecord->parent_folder == 'root') {
+            $relativePath = "nse/{$dateFolder}/{$fileRecord->segment}/{$fileRecord->name}";
+        } else {
+            $relativePath = "nse/{$dateFolder}/{$fileRecord->segment}/{$fileRecord->parent_folder}/{$fileRecord->name}";
+        }
 
+        $absolutePath      = Storage::path($relativePath);
         $fileExistsLocally = Storage::exists($relativePath);
 
         /*
-    |--------------------------------------------------------------------------
-    | ARCHIVE VIEW LOGIC
-    |--------------------------------------------------------------------------
-    | Only serve from local. Never hit API.
-    */
-        if ($this->source === 'archive') {
+        |--------------------------------------------------------------------------
+        | Resolve folder param
+        |--------------------------------------------------------------------------
+        */
+        $folderParam = (
+            $fileRecord->parent_folder === 'root' ||
+            $fileRecord->parent_folder === ''     ||
+            strtolower($fileRecord->parent_folder) === 'root'
+        ) ? '' : $fileRecord->parent_folder;
 
-            if (!$fileExistsLocally) {
-                throw new \Exception("Archived file not found in local storage.");
-            }
-
-            return;
+        /*
+        |--------------------------------------------------------------------------
+        | Ensure directory exists
+        |--------------------------------------------------------------------------
+        */
+        $directory = dirname($relativePath);
+        if (!Storage::exists($directory)) {
+            Storage::makeDirectory($directory);
         }
 
         /*
-    |--------------------------------------------------------------------------
-    | TODAY VIEW LOGIC
-    |--------------------------------------------------------------------------
-    | Download if:
-    |   - File does not exist
-    |   - OR NSE modified date > local modified date
-    */
-        $shouldDownload = false;
-
-        if (!$fileExistsLocally) {
-
-            $shouldDownload = true;
-        } else {
-
-            $localModified = Carbon::createFromTimestamp(
-                filemtime($absolutePath)
-            );
-
-            if (
-                $fileRecord->nse_modified_at &&
-                $fileRecord->nse_modified_at->gt($localModified)
-            ) {
-                $shouldDownload = true;
-            }
-        }
-
-        if ($shouldDownload) {
+        |--------------------------------------------------------------------------
+        | ARCHIVE MODE — Download only if file missing
+        |--------------------------------------------------------------------------
+        */
+        if ($this->source === 'archive') {
 
             if (!$this->authToken) {
-                throw new \Exception("Missing auth token for NSE API download.");
+                throw new \Exception("Missing auth token for archive download.");
             }
 
-            $directory = dirname($relativePath);
-
-            // if (!Storage::exists($directory)) {
-            //     Storage::makeDirectory($directory);
-            // }
-
-            $folderParam = (
-                $fileRecord->parent_folder === 'root' ||
-                $fileRecord->parent_folder === '' ||
-                strtolower($fileRecord->parent_folder) === 'root'
-            ) ? '' : $fileRecord->parent_folder;
-
-            $success = $nseService->downloadFileFromApi(
+            $finalPath = $nseService->downloadFileFromApi(
                 $this->authToken,
                 $fileRecord->segment,
                 $folderParam,
@@ -105,18 +91,68 @@ class SyncNseFileJob
                 $absolutePath
             );
 
-            if (!$success) {
-                throw new \Exception("Failed to download file from NSE API.");
+            if (!$finalPath) {
+                throw new \Exception("Failed to download archive file: {$fileRecord->name}");
             }
 
-            /*
+            Log::info("Archive download complete: $finalPath");
+            return;
+        }
+
+        /*
         |--------------------------------------------------------------------------
-        | Sync Local File Timestamp
+        | TODAY MODE — Download if missing or NSE has newer version
         |--------------------------------------------------------------------------
         */
-            if ($fileRecord->nse_modified_at) {
-                touch($absolutePath, $fileRecord->nse_modified_at->timestamp);
+        $shouldDownload = true;
+
+        if ($fileExistsLocally) {
+            $localModified = Carbon::createFromTimestamp(filemtime($absolutePath));
+
+            if (
+                $fileRecord->nse_modified_at &&
+                !$fileRecord->nse_modified_at->gt($localModified)
+            ) {
+                $shouldDownload = false;
             }
         }
+
+        if (!$shouldDownload) {
+            Log::info("Skipping download, local file is up to date: {$fileRecord->name}");
+            return;
+        }
+
+        if (!$this->authToken) {
+            throw new \Exception("Missing auth token for NSE API download.");
+        }
+
+        $finalPath = $nseService->downloadFileFromApi(
+            $this->authToken,
+            $fileRecord->segment,
+            $folderParam,
+            $fileRecord->name,
+            $absolutePath
+        );
+
+        if (!$finalPath) {
+            throw new \Exception("Failed to download file from NSE API: {$fileRecord->name}");
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Update DB Flags
+        |--------------------------------------------------------------------------
+        */
+        $fileRecord->update([
+            'is_downloaded'     => 1,
+            'download_attempts' => 0
+        ]);
+
+        // ✅ touch() uses $finalPath (.csv) not $absolutePath (.csv.gz which is now deleted)
+        if ($fileRecord->nse_modified_at) {
+            touch($finalPath, $fileRecord->nse_modified_at->timestamp);
+        }
+
+        Log::info("Today download complete: $finalPath");
     }
 }

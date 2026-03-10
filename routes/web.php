@@ -5,6 +5,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\Admin\BSEController;
 use App\Http\Controllers\Admin\NSEController;
+use App\Http\Controllers\Admin\NSELogController;
 use App\Http\Controllers\Admin\NSECommanController;
 
 use Illuminate\Support\Facades\Cache;
@@ -67,6 +68,9 @@ Route::get('/nse/sync/progress/{segment}', function ($segment) {
         // Route to serve the generated Zip
         Route::get('/nse/download/bulk/serve/{filename}', [NSEController::class, 'serveBulkZip'])->name('nse.bulk.serve');
         Route::get('/nse/common/download/bulk/serve/{filename}', [NSECommanController::class, 'serveBulkZip'])->name('nse.common.bulk.serve');
+
+
+        Route::get('/nse/logs/{type}/{segment}', [NSELogController::class, 'index'])->name('nse.logs.index');
 
         // BSE
         // Route::get('/files/bse', [BSEController::class, 'index'])->name('bse.index');

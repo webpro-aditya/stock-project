@@ -30,7 +30,7 @@ class NSECommonSegment extends Command
             SyncNseCommaonFolders::dispatch(
                 $segment,
                 ''
-            )->onQueue('nse-cron');
+            );
         }
 
         Log::channel('syncron')->info('NSE Common jobs dispatched----'.  now('Asia/Kolkata'));

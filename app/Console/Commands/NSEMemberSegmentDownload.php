@@ -2,15 +2,15 @@
 
 namespace App\Console\Commands;
 
-use App\Jobs\SyncNseFolders;
+use App\Jobs\SyncSegmentDownloadJob;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 
-class NSEMemberSegment extends Command
+class NSEMemberSegmentDownload extends Command
 {
-    protected $signature = 'run:nsemember';
+    protected $signature = 'run:nsememberdownload';
 
-    protected $description = 'Sync NSE member data for segments CM, CD, CO, FO';
+    protected $description = 'Download NSE member files for segments CM, CD, CO, FO';
 
     public function handle()
     {
@@ -26,9 +26,8 @@ class NSEMemberSegment extends Command
         $segments = ['CM', 'CO', 'CD', 'FO'];
 
         foreach ($segments as $segment) {
-            SyncNseFolders::dispatch(
-                $segment,
-                ''
+            SyncSegmentDownloadJob::dispatch(
+                $segment
             );
         }
 

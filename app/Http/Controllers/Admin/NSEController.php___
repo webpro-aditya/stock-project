@@ -42,83 +42,96 @@ class NSEController extends Controller
     // public function getTodaySegmentFolder(Request $request, $segment, $folder)
     // {
     //     $segment = Str::upper($segment);
-    //     $currentFolder = $request->query('folder') ?? '';
+    //     $currentFolder = $request->query('folder') ?? 'root';
+    //     $today = Carbon::today();
 
-    //     /*
-    // |--------------------------------------------------------------------------
-    // | Trigger Folder Sync (Single Level)
-    // |--------------------------------------------------------------------------
-    // */
-    //     $this->syncMemberSegment($segment, $currentFolder);
-
-    //     /*
-    // |--------------------------------------------------------------------------
-    // | Get Last Synced Time
-    // |--------------------------------------------------------------------------
-    // */
-    //     $lastSyncedDb = SyncJob::where([
+    //     $cacheKey = "nse_sync_" . Str::slug($segment . '_' . $folder . '_today');
+    //     $lastSyncedCache = Cache::get($cacheKey . '_time');
+    //     $lastSyncedDb = SyncJob::select('updated_at')->where([
     //         'type' => 'member',
     //         'segment' => $segment
     //     ])
-    //         ->latest('updated_at')
-    //         ->first();
-
+    //     ->latest('updated_at')
+    //     ->first();
     //     $lastSyncedFormatted = $lastSyncedDb
-    //         ? Carbon::parse($lastSyncedDb->updated_at)->format('Y-m-d h:i:s A')
-    //         : '';
+    //         ? Carbon::parse($lastSyncedDb->updated_at)->format('Y-m-d h:i:s A') : '';
 
     //     /*
     // |--------------------------------------------------------------------------
-    // | Load Current Folder Data
+    // | STEP 1 — Get today's modified items
     // |--------------------------------------------------------------------------
     // */
-    //     $parent = $currentFolder ?: 'root';
+    //     $todayItems = NseContent::where('segment', $segment)
+    //         ->whereDate('nse_modified_at', $today)
+    //         ->get(['path']);
 
+    //     if ($todayItems->isEmpty()) {
+    //         return view('admin.nse.segment_folder_today', [
+    //             'segment'     => $segment,
+    //             'folder'      => $currentFolder,
+    //             'contents'    => collect(),
+    //             'lastSynced'  => $lastSyncedFormatted
+    //         ]);
+    //     }
+
+    //     /*
+    // |--------------------------------------------------------------------------
+    // | STEP 2 — Collect all parent paths
+    // |--------------------------------------------------------------------------
+    // */
+    //     $requiredPaths = collect();
+
+    //     foreach ($todayItems as $item) {
+
+    //         $parts = explode('/', $item->path);
+
+    //         $accumulated = '';
+
+    //         foreach ($parts as $index => $part) {
+
+    //             $accumulated = $index === 0
+    //                 ? $part
+    //                 : $accumulated . '/' . $part;
+
+    //             $requiredPaths->push($accumulated);
+    //         }
+    //     }
+
+    //     $requiredPaths = $requiredPaths->unique();
+
+    //     /*
+    // |--------------------------------------------------------------------------
+    // | STEP 3 — Load current folder contents
+    // |--------------------------------------------------------------------------
+    // */
     //     $contents = NseContent::where('segment', $segment)
-    //         ->where('parent_folder', $parent)
-    //         ->orderBy('type')      // Folders first
-    //         ->orderBy('name')
-    //         ->get();
+    //     ->where(function ($query) use ($currentFolder) {
+    //         $query->where('parent_folder', $currentFolder === 'root' ? 'root' : $currentFolder);
+    //     })
+    //     ->where(function ($query) use ($today, $requiredPaths) {
+    //         $query->whereDate('nse_modified_at', $today)
+    //             ->orWhereIn('path', $requiredPaths);
+    //     })
+    //     ->orderByDesc('id')
+    //     ->get()
+    //     ->unique(fn($item) => $item->parent_folder . '_' . $item->name);
 
     //     return view('admin.nse.segment_folder_today', [
-    //         'segment'    => $segment,
-    //         'folder'     => $currentFolder,
-    //         'contents'   => $contents,
-    //         'lastSynced' => $lastSyncedFormatted
+    //         'segment'     => $segment,
+    //         'folder'      => $currentFolder,
+    //         'contents'    => $contents,
+    //         'lastSynced'  => $lastSyncedFormatted
     //     ]);
     // }
 
     public function getTodaySegmentFolder(Request $request, $segment, $folder)
     {
-        $existingSync = SyncJob::where('type', 'member')
-            ->where('segment', $segment)
-            ->whereDate('created_at', Carbon::today())
-            ->first();
-
-        if ($existingSync) {
-            $existingSync->touch();
-        } else {
-            SyncJob::create([
-                'type' => 'member',
-                'segment' => $segment,
-            ]);
-        }
-
         $segment = Str::upper($segment);
-        $currentFolder = $request->query('folder') ?? '';
+        $currentFolder = $request->query('folder') ?? 'root';
+        $today = Carbon::today();
 
-        /*
-    |--------------------------------------------------------------------------
-    | Trigger Folder Sync
-    |--------------------------------------------------------------------------
-    */
-        $this->syncMemberSegment($segment, $currentFolder);
+        $cacheKey = "nse_sync_" . Str::slug($segment . '_' . $folder . '_today');
 
-        /*
-    |--------------------------------------------------------------------------
-    | Last Synced Time
-    |--------------------------------------------------------------------------
-    */
         $lastSyncedDb = SyncJob::where([
             'type' => 'member',
             'segment' => $segment
@@ -132,79 +145,105 @@ class NSEController extends Controller
 
         /*
     |--------------------------------------------------------------------------
-    | Load Current Folder Records
+    | STEP 1 — Get today's modified file paths
     |--------------------------------------------------------------------------
     */
-        $parent = $currentFolder ?: 'root';
+        $todayItems = NseContent::where('segment', $segment)
+            ->whereDate('nse_modified_at', $today)
+            ->get(['path']);
 
-        $contents = NseContent::where('segment', $segment)
-            ->where('parent_folder', $parent)
-            ->orderBy('type', 'DESC')
-            ->get();
+        if ($todayItems->isEmpty()) {
+            return view('admin.nse.segment_folder_today', [
+                'segment'     => $segment,
+                'folder'      => $currentFolder,
+                'contents'    => collect(),
+                'lastSynced'  => $lastSyncedFormatted
+            ]);
+        }
 
         /*
     |--------------------------------------------------------------------------
-    | Compute Folder Modified Time From Immediate Children
+    | STEP 2 — Collect required parent paths
     |--------------------------------------------------------------------------
     */
+        $requiredPaths = collect();
 
-        // Get all folder paths in current level
-        $folderPaths = $contents
-            ->where('type', 'Folder')
-            ->pluck('path')
-            ->map(function ($path) use ($segment) {
-                return Str::after($path, $segment . '/');
+        foreach ($todayItems as $item) {
+
+            $parts = explode('/', $item->path);
+            $accumulated = '';
+
+            foreach ($parts as $index => $part) {
+
+                $accumulated = $index === 0
+                    ? $part
+                    : $accumulated . '/' . $part;
+
+                $requiredPaths->push($accumulated);
+            }
+        }
+
+        $requiredPaths = $requiredPaths->unique()->values();
+
+        /*
+    |--------------------------------------------------------------------------
+    | STEP 3 — Fetch contents for current folder
+    |--------------------------------------------------------------------------
+    */
+        $contents = NseContent::where('segment', $segment)
+            ->where('parent_folder', $currentFolder === 'root' ? 'root' : $currentFolder)
+            ->where(function ($query) use ($today, $requiredPaths) {
+                $query->whereDate('nse_modified_at', $today)
+                    ->orWhereIn('path', $requiredPaths);
             })
-            ->toArray();
+            ->get()
+            ->unique(fn($item) => $item->parent_folder . '_' . $item->name)
+            ->values();
 
-        if (!empty($folderPaths)) {
+        /*
+        |--------------------------------------------------------------------------
+        | STEP 4 — Recursive Folder Timestamp Aggregation
+        |--------------------------------------------------------------------------
+        */
 
-            $children = NseContent::where('segment', $segment)
-                ->whereIn('parent_folder', $folderPaths)
-                ->select('parent_folder', 'nse_modified_at')
-                ->get()
-                ->groupBy('parent_folder');
+        $contents = $contents->map(function ($item) use ($segment) {
 
-            $contents = $contents->map(function ($item) use ($children, $segment) {
-
-                $folderKey = Str::after($item->path, $segment . '/');
-
-                $childRows = $children->get($folderKey);
-
-                if ($childRows && $childRows->count()) {
-
-                    $latest = $childRows
-                        ->pluck('nse_modified_at')
-                        ->filter()
-                        ->max();
-
-                    if ($latest) {
-                        $item->nse_modified_at = Carbon::parse($latest);
-                    }
-                }
-
+            if ($item->type !== 'Folder') {
                 return $item;
-            });
-        }
+            }
 
-        $status = Session::get('member_api_success');
+            $descendants = NseContent::where('segment', $segment)
+                ->where('type', 'File')
+                ->where('path', 'like', $item->path . '%')
+                ->selectRaw('
+                    MAX(nse_created_at) as max_created,
+                    MAX(nse_modified_at) as max_modified
+                ')
+                ->first();
 
-        if ($status === true) {
-            session()->flash('success', 'Connected successfully.');
-        } else {
-            session()->flash('error', 'Connection failed.');
-        }
+            if ($descendants && $descendants->max_created) {
+
+                $item->nse_created_at = Carbon::parse($descendants->max_created);
+                $item->nse_modified_at = Carbon::parse($descendants->max_modified);
+            } else {
+                // keep original values if no descendants
+                $item->nse_created_at = $item->nse_created_at ?? null;
+                $item->nse_modified_at = $item->nse_modified_at ?? null;
+            }
+
+            return $item;
+        });
 
         return view('admin.nse.segment_folder_today', [
-            'segment'    => $segment,
-            'folder'     => $currentFolder,
-            'contents'   => $contents,
-            'lastSynced' => $lastSyncedFormatted
+            'segment'     => $segment,
+            'folder'      => $currentFolder,
+            'contents'    => $contents,
+            'lastSynced'  => $lastSyncedFormatted
         ]);
     }
 
 
-    public function syncMemberSegment($segment, $folder)
+    public function syncMemberSegment($segment)
     {
         $existingSync = SyncJob::where('type', 'member')
             ->where('segment', $segment)
@@ -220,12 +259,15 @@ class NSEController extends Controller
             ]);
         }
 
-        /*
-    |--------------------------------------------------------------------------
-    | Dispatch Sync Job (Single Folder Only)
-    |--------------------------------------------------------------------------
-    */
-        SyncNseFolders::dispatch($segment, $folder);
+        SyncNseFolders::dispatch(
+            $segment,
+            ''
+        );
+
+        return response()->json([
+            'success' => true,
+            'message' => 'NSE sync started in background.'
+        ]);
     }
 
 
@@ -254,7 +296,7 @@ class NSEController extends Controller
     //         'message' => 'NSE sync started sequentially.'
     //     ]);
     // }
-
+    
     public function getArchiveSegmentFolder($segment, $folder)
     {
         $segment = Str::upper($segment);
@@ -371,9 +413,48 @@ class NSEController extends Controller
     public function prepareDownload(Request $request, $id)
     {
         try {
-            $source     = $request->query('source', 'today');
+
+            $source = $request->query('source', 'today');
+            // today | archive
+
+            $today = now()->toDateString();
+
             $fileRecord = NseContent::findOrFail($id);
-            $authToken  = $this->nseService->getAuthToken();
+
+            /*
+        |--------------------------------------------------------------------------
+        | ARCHIVE MODE → NEVER call API
+        |--------------------------------------------------------------------------
+        */
+            if ($source === 'archive') {
+
+                $authToken = $this->nseService->getAuthToken();
+
+                $storagePath = storage_path(
+                    'app/nse/' .
+                        $request->date . '/' .
+                        $fileRecord->segment . '/' .
+                        $fileRecord->parent_folder . '/' .
+                        $fileRecord->name
+                );
+
+                if (!file_exists($storagePath)) {
+                    SyncNseFileJob::dispatchSync($id, $authToken, 'archive', $request->date);
+                }
+
+                return response()->json([
+                    'success' => true,
+                    'url' => route('nse.file.serve', ['id' => $id])
+                ]);
+            }
+
+            /*
+        |--------------------------------------------------------------------------
+        | TODAY MODE → Download if missing
+        |--------------------------------------------------------------------------
+        */
+
+            $authToken = $this->nseService->getAuthToken();
 
             if (!$authToken) {
                 return response()->json([
@@ -382,42 +463,14 @@ class NSEController extends Controller
                 ], 401);
             }
 
-            if ($source === 'archive') {
-                $archiveDate = $request->query('date');
-
-                // ✅ Build correct path (no 'root' folder in path)
-                $folderSegment = (!empty($fileRecord->parent_folder) && strtolower($fileRecord->parent_folder) !== 'root')
-                    ? $fileRecord->parent_folder . '/'
-                    : '';
-
-                $storagePath = storage_path(
-                    'app/nse/' . $archiveDate . '/' .
-                        $fileRecord->segment . '/' .
-                        $folderSegment .
-                        $fileRecord->name
-                );
-
-                if (!file_exists($storagePath)) {
-                    SyncNseFileJob::dispatchSync($id, $authToken, 'archive', $archiveDate);
-                }
-
-                return response()->json([
-                    'success' => true,
-                    'url' => route('nse.file.serve', [
-                        'id'          => $id,
-                        'archiveDate' => $archiveDate  // ✅ pass date as query param
-                    ])
-                ]);
-            }
-
-            // TODAY MODE
-            SyncNseFileJob::dispatchSync($id, $authToken, 'today');
+            SyncNseFileJob::dispatchSync($id, $authToken);
 
             return response()->json([
                 'success' => true,
                 'url' => route('nse.file.serve', ['id' => $id])
             ]);
         } catch (\Exception $e) {
+
             return response()->json([
                 'success' => false,
                 'message' => $e->getMessage()
@@ -428,43 +481,40 @@ class NSEController extends Controller
 
     public function serveFile(Request $request, $id)
     {
-        $fileRecord  = NseContent::findOrFail($id);
+        $fileRecord = NseContent::findOrFail($id);
 
-        // ✅ Resolve date folder
-        $dateFolder = $request->query('archiveDate')
-            ?? $fileRecord->created_at->format('Y-m-d');
+        /*
+    |--------------------------------------------------------------------------
+    | Resolve date folder from DB
+    |--------------------------------------------------------------------------
+    */
 
-        // ✅ No 'root' in path
-        $folderSegment = (!empty($fileRecord->parent_folder) && strtolower($fileRecord->parent_folder) !== 'root')
-            ? $fileRecord->parent_folder . '/'
-            : '';
+        $dateFolder = $fileRecord->created_at->format('Y-m-d');
 
-        $baseName = $fileRecord->name;
-
-        // ✅ If original file was .gz, the actual stored file is now .csv (decompressed)
-        if (str_ends_with($baseName, '.gz')) {
-            $baseName = substr($baseName, 0, -3); // strip .gz
+        if (!empty($request->archiveDate)) {
+            $dateFolder = $request->archiveDate;
         }
 
-        $relativePath = 'nse/' . $dateFolder . '/' .
+        $relativePath = 'nse/' .
+            $dateFolder . '/' .
             $fileRecord->segment . '/' .
-            $folderSegment .
-            $baseName;
+            ($fileRecord->parent_folder !== 'root'
+                ? $fileRecord->parent_folder . '/'
+                : '') .
+            $fileRecord->name;
 
         if (!Storage::exists($relativePath)) {
-            Log::error("serveFile: File not found at: $relativePath");
-            abort(404, 'File not found.');
+            return redirect()->back();
         }
 
-        // ✅ Serve with correct filename (no .gz extension)
-        return Storage::download($relativePath, $baseName);
+        return Storage::download($relativePath, $fileRecord->name);
     }
-
 
 
     public function prepareBulkDownload(Request $request)
     {
         try {
+
             $ids = array_unique($request->input('ids', []));
 
             if (empty($ids)) {
@@ -483,51 +533,39 @@ class NSEController extends Controller
                 ], 404);
             }
 
+            /*
+        |--------------------------------------------------------------------------
+        | Ensure Files Are Downloaded (Only If Missing)
+        |--------------------------------------------------------------------------
+        */
             $authToken = $this->nseService->getAuthToken();
 
-            if (!$authToken) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Authentication failed.'
-                ], 401);
-            }
-
-            /*
-        |------------------------------------------------------------------
-        | Sync each file if not already downloaded
-        |------------------------------------------------------------------
-        */
             foreach ($files as $file) {
-                $dateFolder = Carbon::parse($file->created_at)->format('Y-m-d');
 
-                // ✅ Correct folder segment — no 'root' in path
-                $folderSegment = (!empty($file->parent_folder) && strtolower($file->parent_folder) !== 'root')
-                    ? $file->parent_folder . '/'
-                    : '';
+                $dateFolder = \Carbon\Carbon::parse($file->created_at)
+                    ->format('Y-m-d');
 
-                // ✅ Resolve actual stored filename (.gz → .csv)
-                $storedName = str_ends_with($file->name, '.gz')
-                    ? substr($file->name, 0, -3)
-                    : $file->name;
+                $relativePath = "nse/{$dateFolder}/{$file->segment}/{$file->parent_folder}/{$file->name}";
 
-                $relativePath = "nse/{$dateFolder}/{$file->segment}/{$folderSegment}{$storedName}";
-
-                // ✅ Only re-download if file is actually missing
-                if (!Storage::exists($relativePath)) {
-                    try {
-                        SyncNseFileJob::dispatchSync($file->id, $authToken, 'today');
-                    } catch (\Throwable $e) {
-                        Log::error("File sync failed for ID {$file->id}: " . $e->getMessage());
-                    }
+                // if (!Storage::exists($relativePath)) {
+                try {
+                    SyncNseFileJob::dispatchSync(
+                        $file->id,
+                        $authToken,
+                        'today'
+                    );
+                } catch (\Throwable $e) {
+                    \Log::error("File sync failed for ID {$file->id}: " . $e->getMessage());
                 }
+                // }
             }
 
             /*
-        |------------------------------------------------------------------
+        |--------------------------------------------------------------------------
         | Create ZIP
-        |------------------------------------------------------------------
+        |--------------------------------------------------------------------------
         */
-            $zipFileName     = 'nse_bulk_' . now()->format('Ymd_His') . '_' . Str::random(6) . '.zip';
+            $zipFileName = 'nse_bulk_' . now()->format('Ymd_His') . '_' . Str::random(6) . '.zip';
             $relativeZipPath = 'nse_temp_zips/' . $zipFileName;
             $absoluteZipPath = Storage::path($relativeZipPath);
 
@@ -537,73 +575,56 @@ class NSEController extends Controller
 
             $zip = new ZipArchive;
 
-            if ($zip->open($absoluteZipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
+            if ($zip->open($absoluteZipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== TRUE) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Failed to create ZIP archive.'
                 ], 500);
             }
 
-            $addedNames  = [];
-            $addedCount  = 0;
+            $addedNames = [];
 
             foreach ($files as $file) {
-                $dateFolder = Carbon::parse($file->created_at)->format('Y-m-d');
 
-                // ✅ Correct folder segment
-                $folderSegment = (!empty($file->parent_folder) && strtolower($file->parent_folder) !== 'root')
-                    ? $file->parent_folder . '/'
-                    : '';
+                $dateFolder = \Carbon\Carbon::parse($file->created_at)
+                    ->format('Y-m-d');
 
-                // ✅ Actual stored filename (no .gz)
-                $storedName = str_ends_with($file->name, '.gz')
-                    ? substr($file->name, 0, -3)
-                    : $file->name;
-
-                $relativeFilePath = "nse/{$dateFolder}/{$file->segment}/{$folderSegment}{$storedName}";
+                $relativeFilePath = "nse/{$dateFolder}/{$file->segment}/{$file->parent_folder}/{$file->name}";
 
                 if (!Storage::exists($relativeFilePath)) {
-                    Log::warning("Bulk ZIP: File missing, skipping: $relativeFilePath");
                     continue;
                 }
 
                 $absoluteFilePath = Storage::path($relativeFilePath);
 
-                // ✅ ZIP entry uses storedName (.csv), not $file->name (.csv.gz)
-                $zipName = $storedName;
+                $zipName = $file->name;
 
-                // ✅ Prevent duplicate filenames inside zip
+                // Prevent duplicate filenames inside zip
                 if (in_array($zipName, $addedNames)) {
-                    $zipName = pathinfo($storedName, PATHINFO_FILENAME)
+                    $zipName = pathinfo($zipName, PATHINFO_FILENAME)
                         . '_' . $file->id . '.'
-                        . pathinfo($storedName, PATHINFO_EXTENSION);
+                        . pathinfo($zipName, PATHINFO_EXTENSION);
                 }
 
                 $zip->addFile($absoluteFilePath, $zipName);
                 $addedNames[] = $zipName;
-                $addedCount++;
             }
 
             $zip->close();
 
-            // ✅ Don't return an empty ZIP
-            if ($addedCount === 0) {
-                if (file_exists($absoluteZipPath)) unlink($absoluteZipPath);
-                return response()->json([
-                    'success' => false,
-                    'message' => 'No files could be added to the ZIP.'
-                ], 404);
-            }
-
             return response()->json([
                 'success' => true,
-                'url'     => route('nse.bulk.serve', ['filename' => $zipFileName])
+                'url' => route('nse.bulk.serve', [
+                    'filename' => $zipFileName
+                ])
             ]);
         } catch (\Throwable $e) {
+
             Log::error("Bulk download failed: " . $e->getMessage());
+
             return response()->json([
                 'success' => false,
-                'message' => 'Bulk download failed: ' . $e->getMessage()
+                'message' => 'Bulk download failed.'
             ], 500);
         }
     }
@@ -611,13 +632,11 @@ class NSEController extends Controller
 
     public function serveBulkZip($filename)
     {
-        // ✅ Sanitize filename to prevent path traversal
-        $filename     = basename($filename);
+        $filename = basename($filename);
         $relativePath = 'nse_temp_zips/' . $filename;
 
         if (!Storage::exists($relativePath)) {
-            Log::error("serveBulkZip: ZIP not found: $relativePath");
-            abort(404, 'ZIP file not found.');  // ✅ proper 404 instead of silent redirect
+            abort(404, 'Zip file expired or not found.');
         }
 
         $absolutePath = Storage::path($relativePath);
