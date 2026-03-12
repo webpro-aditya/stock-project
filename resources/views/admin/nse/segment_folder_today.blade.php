@@ -178,11 +178,11 @@ $path = '';
                             {{--</a>--}}
                         </td>
                         <td class="px-6 py-4 text-gray-700 font-medium">
-                            {{ $item->nse_created_at ? $item->nse_created_at->format('Y-m-d h:i a') : '' }}
+                            {{ $item->nse_created_at ? $item->nse_created_at->setTimezone('Asia/Kolkata')->format('Y-m-d h:i a') : '' }}
                         </td>
                         <td class="px-6 py-4 text-gray-700 font-medium">
                             <div class="flex flex-col">
-                                <span>{{ $item->nse_modified_at ? $item->nse_modified_at->format('Y-m-d h:i a') : '' }}</span>
+                                <span>{{ $item->nse_modified_at ? $item->nse_modified_at->setTimezone('Asia/Kolkata')->format('Y-m-d h:i a') : '' }}</span>
                                 @if ($isModified)
                                     <span class="flex items-center gap-1.5 text-xs text-amber-600 font-semibold mt-0.5">
                                         <i data-lucide="alert-circle" class="w-3.5 h-3.5"></i>
