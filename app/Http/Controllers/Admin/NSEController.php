@@ -127,7 +127,7 @@ class NSEController extends Controller
             ->first();
 
         $lastSyncedFormatted = $lastSyncedDb
-            ? Carbon::parse($lastSyncedDb->updated_at)->format('Y-m-d h:i:s A')
+            ? Carbon::parse($lastSyncedDb->updated_at)->timezone('Asia/Kolkata')->format('Y-m-d h:i:s A')
             : '';
 
         /*

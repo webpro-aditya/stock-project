@@ -34,8 +34,8 @@ $path = '';
     </button>
 
     <div class="flex items-center gap-1.5 text-xs text-gray-500 font-medium mr-1">
-        @if($lastSynced && \Carbon\Carbon::parse($lastSynced)->isToday())
-        <span class="w-2 h-2 rounded-full bg-yellow-500 shadow-[0_0_4px_rgba(34,197,94,0.6)]" title="Synced Today"></span>
+        @if($lastSynced && \Carbon\Carbon::parse($lastSynced)->timezone('Asia/Kolkata')->isToday())
+        <span class="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_4px_rgba(34,197,94,0.6)]" title="Synced Today"></span>
         @else
         <span class="w-2 h-2 rounded-full bg-yellow-500" title="Synced Previously"></span>
         @endif
