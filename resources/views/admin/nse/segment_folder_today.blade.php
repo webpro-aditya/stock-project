@@ -308,19 +308,26 @@ $path = '';
             .then(res => res.json())
             .then(data => {
                 if (data.status === 'ok') {
-                    // Step 1: Inject fresh rows
-                    document.getElementById('folderTableBody').innerHTML = data.html;
+                    // Step 1: Inject rows
+                    const tbody = document.getElementById('folderTableBody');
+                    if (!tbody) return; // safety guard
+                    tbody.innerHTML = data.html;
 
-                    // Step 2: Reinit using the master layout's shared function
-                    // ✅ This is the only DataTables init — no double-init conflict
+                    // ✅ Step 2: Ensure table always has its id before DataTables init
+                    const table = tbody.closest('table');
+                    if (table && !table.id) {
+                        table.id = 'activityTable';
+                    }
+
+                    // Step 3: Reinit DataTables
                     if (typeof window.initActivityTable === 'function') {
                         window.initActivityTable();
                     }
 
-                    // Step 3: Reinit Lucide icons
-                    lucide.createIcons();
+                    // Step 4: Reinit Lucide icons
+                    if (typeof lucide !== 'undefined') lucide.createIcons();
 
-                    // Step 4: Update last synced text
+                    // Step 5: Update last synced text
                     if (lastSynced) {
                         const syncedEl = document.querySelector('[data-last-synced]');
                         if (syncedEl) syncedEl.textContent = lastSynced;
