@@ -15,6 +15,32 @@ $path = '';
         height: 5px;
         margin: 0 !important;
     }
+
+    /* Staggered bounce for sync dots */
+    @keyframes badge-bounce {
+
+        0%,
+        80%,
+        100% {
+            transform: translateY(0);
+            opacity: 0.4;
+        }
+
+        40% {
+            transform: translateY(-4px);
+            opacity: 1;
+        }
+    }
+
+    #syncDots span {
+        animation: badge-bounce 1.2s ease-in-out infinite;
+    }
+
+    /* Fade in/out transitions for badges */
+    #syncStatusBadge,
+    #syncDoneBadge {
+        transition: opacity 0.25s ease;
+    }
 </style>
 @endsection
 
@@ -60,15 +86,6 @@ $path = '';
 </div>
 @endsection
 @section('content')
-<div id="syncProgressWrapper" class="hidden mt-3">
-    <div class="w-full bg-gray-200 rounded-lg overflow-hidden">
-        <div id="syncProgressBar"
-            class="bg-brand text-xs font-semibold text-white text-center py-1 transition-all duration-300"
-            style="width: 0%">
-            0%
-        </div>
-    </div>
-</div>
 <main class="flex-1 p-6 bg-gray-50">
     <nav class="p-2 text-sm font-medium text-gray-600">
         <ol class="flex items-center gap-2 flex-wrap">
@@ -120,9 +137,40 @@ $path = '';
 
     <div class="bg-white rounded-lg shadow-lg">
         <div class="px-6 py-3 border-b border-gray-200">
-            <div class="flex items-center gap-3 text-lg font-bold text-gray-900">
-                <i data-lucide="sun" class="w-6 h-6 text-amber-500"></i>
-                All Activity
+            <div class="flex items-center justify-between flex-wrap gap-2">
+
+                {{-- Left: Title --}}
+                <div class="flex items-center gap-3 text-lg font-bold text-gray-900">
+                    <i data-lucide="sun" class="w-6 h-6 text-amber-500"></i>
+                    All Activity
+                </div>
+
+                {{-- Right: Syncing badge --}}
+                <div id="syncStatusBadge"
+                    style="display:none;"
+                    class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-indigo-200 bg-indigo-50">
+                    {{-- Ping dot --}}
+                    <span class="relative flex h-2 w-2 shrink-0">
+                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+                        <span class="relative inline-flex h-2 w-2 rounded-full bg-indigo-500"></span>
+                    </span>
+                    <span class="text-xs font-semibold text-indigo-600 whitespace-nowrap">Syncing in background</span>
+                    {{-- Animated dots --}}
+                    <span class="flex gap-0.5 items-center" id="syncDots">
+                        <span class="w-1 h-1 rounded-full bg-indigo-400 animate-bounce" style="animation-delay:0ms"></span>
+                        <span class="w-1 h-1 rounded-full bg-indigo-400 animate-bounce" style="animation-delay:150ms"></span>
+                        <span class="w-1 h-1 rounded-full bg-indigo-400 animate-bounce" style="animation-delay:300ms"></span>
+                    </span>
+                </div>
+
+                {{-- Right: Done badge --}}
+                <div id="syncDoneBadge"
+                    style="display:none;"
+                    class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-green-200 bg-green-50">
+                    <span class="relative inline-flex h-2 w-2 shrink-0 rounded-full bg-green-500"></span>
+                    <span class="text-xs font-semibold text-green-600 whitespace-nowrap">Updated just now</span>
+                </div>
+
             </div>
         </div>
 
@@ -183,10 +231,6 @@ $path = '';
         <i data-lucide="x" class="w-5 h-5"></i>
     </button>
 </div>
-<span id="syncStatusBadge" class="hidden flex items-center gap-1 text-xs text-blue-500 font-medium mr-1">
-    <i data-lucide="loader-circle" class="w-3 h-3 animate-spin"></i>
-    Syncing...
-</span>
 @endsection
 
 @section('script')
@@ -205,36 +249,50 @@ $path = '';
     });
 
     // ─── Background Sync on Page Load ────────────────────────────────────────
-    document.addEventListener('DOMContentLoaded', function () {
+    document.addEventListener('DOMContentLoaded', function() {
         triggerBackgroundSync();
     });
 
     function triggerBackgroundSync() {
         const segment = "{{ $segment }}";
-        const folder  = "{{ $folder }}";
-        const badge   = document.getElementById('syncStatusBadge');
+        const folder = "{{ $folder }}";
+        const badge = document.getElementById('syncStatusBadge');
+        const doneBadge = document.getElementById('syncDoneBadge');
 
-        if (badge) badge.classList.remove('hidden');
+        // Show syncing badge
+        if (badge) badge.style.display = 'inline-flex';
+        if (doneBadge) doneBadge.style.display = 'none';
 
         fetch("{{ route('nse.sync.background', ['segment' => ':seg']) }}".replace(':seg', segment), {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
-            },
-            body: JSON.stringify({ folder: folder })
-        })
-        .then(res => res.json())
-        .then(data => {
-            if (badge) badge.classList.add('hidden');
-            if (data.status === 'ok') {
-                refreshFolderTable(segment, folder, data.lastSynced);
-            }
-            // 'in_progress' → silently skip
-        })
-        .catch(() => {
-            if (badge) badge.classList.add('hidden');
-        });
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+                },
+                body: JSON.stringify({
+                    folder: folder
+                })
+            })
+            .then(res => res.json())
+            .then(data => {
+                // Hide syncing badge
+                if (badge) badge.style.display = 'none';
+
+                if (data.status === 'ok') {
+                    refreshFolderTable(segment, folder, data.lastSynced);
+
+                    // Show green done badge, auto-hide after 4s
+                    if (doneBadge) {
+                        doneBadge.style.display = 'inline-flex';
+                        setTimeout(() => {
+                            doneBadge.style.display = 'none';
+                        }, 4000);
+                    }
+                }
+            })
+            .catch(() => {
+                if (badge) badge.style.display = 'none';
+            });
     }
 
     // ─── Refresh Folder Table via AJAX ───────────────────────────────────────
@@ -243,33 +301,35 @@ $path = '';
             .replace(':seg', segment) + '?folder=' + encodeURIComponent(folder);
 
         fetch(url, {
-            headers: { 'X-Requested-With': 'XMLHttpRequest' }
-        })
-        .then(res => res.json())
-        .then(data => {
-            if (data.status === 'ok') {
-                // Step 1: Inject fresh rows
-                document.getElementById('folderTableBody').innerHTML = data.html;
-
-                // Step 2: Reinit using the master layout's shared function
-                // ✅ This is the only DataTables init — no double-init conflict
-                if (typeof window.initActivityTable === 'function') {
-                    window.initActivityTable();
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
                 }
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === 'ok') {
+                    // Step 1: Inject fresh rows
+                    document.getElementById('folderTableBody').innerHTML = data.html;
 
-                // Step 3: Reinit Lucide icons
-                lucide.createIcons();
+                    // Step 2: Reinit using the master layout's shared function
+                    // ✅ This is the only DataTables init — no double-init conflict
+                    if (typeof window.initActivityTable === 'function') {
+                        window.initActivityTable();
+                    }
 
-                // Step 4: Update last synced text
-                if (lastSynced) {
-                    const syncedEl = document.querySelector('[data-last-synced]');
-                    if (syncedEl) syncedEl.textContent = lastSynced;
+                    // Step 3: Reinit Lucide icons
+                    lucide.createIcons();
+
+                    // Step 4: Update last synced text
+                    if (lastSynced) {
+                        const syncedEl = document.querySelector('[data-last-synced]');
+                        if (syncedEl) syncedEl.textContent = lastSynced;
+                    }
                 }
-            }
-        })
-        .catch(() => {
-            // Silent fail — cached data remains visible
-        });
+            })
+            .catch(() => {
+                // Silent fail — cached data remains visible
+            });
     }
 
     // ─── Manual Sync Now Button ───────────────────────────────────────────────
@@ -282,34 +342,48 @@ $path = '';
         lucide.createIcons();
 
         fetch("{{ route('nse.sync.background', ['segment' => ':seg']) }}".replace(':seg', segment), {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
-            },
-            body: JSON.stringify({ folder: folder })
-        })
-        .then(res => res.json())
-        .then(data => {
-            btn.disabled = false;
-            btn.innerHTML = originalHtml;
-            lucide.createIcons();
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+                },
+                body: JSON.stringify({
+                    folder: folder
+                })
+            })
+            .then(res => res.json())
+            .then(data => {
+                btn.disabled = false;
+                btn.innerHTML = originalHtml;
+                lucide.createIcons();
 
-            if (data.status === 'ok') {
-                Toast.fire({ icon: 'success', title: 'Sync completed. Refreshing...' });
-                refreshFolderTable(segment, folder, data.lastSynced);
-            } else if (data.status === 'in_progress') {
-                Toast.fire({ icon: 'info', title: 'Sync already in progress.' });
-            } else {
-                Toast.fire({ icon: 'error', title: 'Sync failed. Please retry.' });
-            }
-        })
-        .catch(() => {
-            btn.disabled = false;
-            btn.innerHTML = originalHtml;
-            lucide.createIcons();
-            Toast.fire({ icon: 'error', title: 'Something went wrong.' });
-        });
+                if (data.status === 'ok') {
+                    Toast.fire({
+                        icon: 'success',
+                        title: 'Sync completed. Refreshing...'
+                    });
+                    refreshFolderTable(segment, folder, data.lastSynced);
+                } else if (data.status === 'in_progress') {
+                    Toast.fire({
+                        icon: 'info',
+                        title: 'Sync already in progress.'
+                    });
+                } else {
+                    Toast.fire({
+                        icon: 'error',
+                        title: 'Sync failed. Please retry.'
+                    });
+                }
+            })
+            .catch(() => {
+                btn.disabled = false;
+                btn.innerHTML = originalHtml;
+                lucide.createIcons();
+                Toast.fire({
+                    icon: 'error',
+                    title: 'Something went wrong.'
+                });
+            });
     }
 
     // ─── File Download ────────────────────────────────────────────────────────
@@ -323,49 +397,52 @@ $path = '';
             .replace(':id', id) + '?source=today';
 
         fetch(url, {
-            method: 'GET',
-            headers: {
-                'X-Requested-With': 'XMLHttpRequest',
-                'Content-Type': 'application/json',
-            }
-        })
-        .then(response => {
-            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-            return response.json();
-        })
-        .then(data => {
-            if (data.success) {
-                Toast.fire({ icon: 'success', title: 'Downloading...' });
-                btn.innerHTML = `<i data-lucide="check-circle" class="w-5 h-5 text-success"></i>&nbsp;Downloaded`;
+                method: 'GET',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Content-Type': 'application/json',
+                }
+            })
+            .then(response => {
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    Toast.fire({
+                        icon: 'success',
+                        title: 'Downloading...'
+                    });
+                    btn.innerHTML = `<i data-lucide="check-circle" class="w-5 h-5 text-success"></i>&nbsp;Downloaded`;
+                    lucide.createIcons();
+                    window.location.href = data.url;
+                } else {
+                    throw new Error('Download failed.');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                Toast.fire({
+                    icon: 'error',
+                    title: 'Download Failed',
+                    text: 'Please retry after some time.',
+                    timer: 5000,
+                    timerProgressBar: true,
+                    showConfirmButton: false
+                });
+                btn.innerHTML = `<i data-lucide="x" class="w-4 h-4 mr-2"></i>`;
                 lucide.createIcons();
-                window.location.href = data.url;
-            } else {
-                throw new Error('Download failed.');
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            Toast.fire({
-                icon: 'error',
-                title: 'Download Failed',
-                text: 'Please retry after some time.',
-                timer: 5000,
-                timerProgressBar: true,
-                showConfirmButton: false
+                setTimeout(() => {
+                    btn.disabled = false;
+                    btn.innerHTML = originalContent;
+                }, 3000);
             });
-            btn.innerHTML = `<i data-lucide="x" class="w-4 h-4 mr-2"></i>`;
-            lucide.createIcons();
-            setTimeout(() => {
-                btn.disabled = false;
-                btn.innerHTML = originalContent;
-            }, 3000);
-        });
     }
 
     // ─── Bulk Selection ───────────────────────────────────────────────────────
     function checkSelection() {
         const count = document.querySelectorAll('.row-selector:checked').length;
-        const bar   = document.getElementById('bulkActionBar');
+        const bar = document.getElementById('bulkActionBar');
         document.getElementById('selectedCount').innerText = count;
 
         if (count > 0) {
@@ -391,7 +468,10 @@ $path = '';
         const selectedIds = Array.from(selectedCheckboxes).map(cb => cb.value);
 
         if (!selectedIds.length) {
-            Toast.fire({ icon: 'warning', title: 'No files selected' });
+            Toast.fire({
+                icon: 'warning',
+                title: 'No files selected'
+            });
             return;
         }
 
@@ -403,62 +483,69 @@ $path = '';
         lucide.createIcons();
 
         fetch("{{ route('nse.member.download.bulk.prepare') }}", {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
-            },
-            body: JSON.stringify({ ids: selectedIds })
-        })
-        .then(response => {
-            if (!response.ok) {
-                return response.json().then(err => { throw new Error(err.message || 'Server Error'); });
-            }
-            return response.json();
-        })
-        .then(data => {
-            if (data.success) {
-                window.location.href = data.url;
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+                },
+                body: JSON.stringify({
+                    ids: selectedIds
+                })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(err => {
+                        throw new Error(err.message || 'Server Error');
+                    });
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    window.location.href = data.url;
 
-                selectedCheckboxes.forEach(cb => {
-                    const row = cb.closest('tr');
-                    if (row) {
-                        const rowDownloadBtn = row.querySelector('button[onclick*="triggerDownload"]');
-                        if (rowDownloadBtn) {
-                            rowDownloadBtn.innerHTML = `<i data-lucide="check-circle" class="w-5 h-5 text-success"></i>&nbsp;Downloaded`;
-                            rowDownloadBtn.style.pointerEvents = 'none';
+                    selectedCheckboxes.forEach(cb => {
+                        const row = cb.closest('tr');
+                        if (row) {
+                            const rowDownloadBtn = row.querySelector('button[onclick*="triggerDownload"]');
+                            if (rowDownloadBtn) {
+                                rowDownloadBtn.innerHTML = `<i data-lucide="check-circle" class="w-5 h-5 text-success"></i>&nbsp;Downloaded`;
+                                rowDownloadBtn.style.pointerEvents = 'none';
+                            }
                         }
-                    }
-                });
-                lucide.createIcons();
-
-                Toast.fire({ icon: 'success', title: 'Download started!' });
-
-                setTimeout(() => {
-                    btn.disabled = false;
-                    btn.innerHTML = originalHtml;
+                    });
                     lucide.createIcons();
-                    clearSelection();
-                }, 2000);
 
-            } else {
-                throw new Error('Download failed.');
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            Toast.fire({
-                icon: 'error',
-                title: 'Download Failed',
-                text: 'Please retry after some time.',
-                timer: 5000,
-                timerProgressBar: true,
-                showConfirmButton: false
+                    Toast.fire({
+                        icon: 'success',
+                        title: 'Download started!'
+                    });
+
+                    setTimeout(() => {
+                        btn.disabled = false;
+                        btn.innerHTML = originalHtml;
+                        lucide.createIcons();
+                        clearSelection();
+                    }, 2000);
+
+                } else {
+                    throw new Error('Download failed.');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                Toast.fire({
+                    icon: 'error',
+                    title: 'Download Failed',
+                    text: 'Please retry after some time.',
+                    timer: 5000,
+                    timerProgressBar: true,
+                    showConfirmButton: false
+                });
+                btn.disabled = false;
+                btn.innerHTML = originalHtml;
+                lucide.createIcons();
             });
-            btn.disabled = false;
-            btn.innerHTML = originalHtml;
-            lucide.createIcons();
-        });
     }
 </script>
 @endsection
