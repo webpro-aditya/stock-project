@@ -27,7 +27,7 @@ class SyncNseFolders implements ShouldQueue, ShouldBeUnique
     private string $segment;
     private string $folder;
 
-    public function __construct(string $segment, string $folder = '')
+    public function __construct(string $segment, ?string $folder = '')
     {
         $this->segment   = Str::upper($segment);
         $this->folder = $this->normalizePath($folder);

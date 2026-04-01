@@ -142,91 +142,13 @@ $path = '';
                         <th scope="col" class="px-6 py-3 text-right action_col">Action</th>
                     </tr>
                 </thead>
-                <tbody>
-                    @forelse($contents as $item)
-                    @php
-                    $isFolder = $item->type == 'Folder';
-                    $url = 'folder=' . $item->parent_folder .'/'. $item->name;
-                    $url = str_replace('root/', '', $url);
-                    if ($item->nse_created_at && $item->nse_modified_at) {
-                    // Check 1: Was it modified after it was created?
-                    $afterCreation = $item->nse_modified_at->gt($item->nse_created_at);
-
-                    // Check 2: Was it modified today?
-                    $modifiedToday = $item->nse_modified_at->isToday();
-
-                    $isModified = $afterCreation && $modifiedToday;
-                    }
-                    $currentPath = url()->current();
-                    @endphp
-                    <tr class="bg-white border-b border-gray-200 hover:bg-gray-50">
-                        <td class="p-4">
-                            @if (!$isFolder)
-                            <input type="checkbox" value="{{ $item->id }}" onchange="checkSelection()" class="row-selector w-4 h-4 custom-checkbox rounded border-gray-300">
-                            @endif
-                        </td>
-                        <td class="px-6 py-4 text-gray-700 font-medium" style="display: none;">
-                            {{ $item->type }}
-                        </td>
-                        <td scope="row" class="px-6 py-4 font-medium text-gray-900 flex items-center gap-3 folder_col">
-                            {{--<a href="{{ ($isFolder) ? $currentPath : '#' }}?{{($isFolder) ? $url : ''}}" class="flex items-center gap-3">--}}
-                            <div
-                                class="w-8 h-8 flex items-center justify-center {{ $isFolder ? 'bg-indigo-100 rounded-lg' : 'bg-indigo-100 rounded-lg' }}">
-                                <i data-lucide="{{ $isFolder ? 'folder' : 'file' }}" class="w-5 h-5 {{ $isFolder ? 'text-yellow-500 fill-yellow-500/20' : 'text-indigo-600' }}"></i>
-                            </div>
-                            <span class="break-all">{{ $item->name }}</span>
-                            {{--</a>--}}
-                        </td>
-                        <td class="px-6 py-4 text-gray-700 font-medium">
-                            {{ $item->nse_created_at ? $item->nse_created_at->setTimezone('Asia/Kolkata')->format('Y-m-d h:i a') : '' }}
-                        </td>
-                        <td class="px-6 py-4 text-gray-700 font-medium">
-                            <div class="flex flex-col">
-                                <span>{{ $item->nse_modified_at ? $item->nse_modified_at->setTimezone('Asia/Kolkata')->format('Y-m-d h:i a') : '' }}</span>
-                                @if ($isModified)
-                                    <span class="flex items-center gap-1.5 text-xs text-amber-600 font-semibold mt-0.5">
-                                        <i data-lucide="alert-circle" class="w-3.5 h-3.5"></i>
-                                        Modified
-                                    </span>
-                                @else
-                                    @if($modifiedToday)
-                                        <span class="flex items-center gap-1.5 text-xs text-amber-600 font-semibold mt-0.5">
-                                            <i data-lucide="alert-circle" class="w-3.5 h-3.5"></i>
-                                            New
-                                        </span>
-                                    @endif
-                                @endif
-                            </div>
-                        </td>
-                        <td class="px-6 py-4 text-left">
-                            <div class="flex items-center gap-3">
-                                @if (!$isFolder)
-                                {{-- Download Button --}}
-                                <button onclick="triggerDownload(this, {{ $item->id }})"
-                                    class="inline-flex items-center font-semibold text-sm text-gray-700 bg-white border border-gray-300 hover:bg-gray-100 px-4 py-2 rounded-lg transition-colors download_open">
-                                    <i data-lucide="download" class="w-4 h-4 mr-2"></i>
-                                    Download
-                                </button>
-                                @else
-                                {{-- Open Folder Link --}}
-                                <a href="{{ $currentPath }}?{{ $url }}"
-                                    class="inline-flex items-center font-semibold text-sm text-gray-700 bg-white border border-gray-300 hover:bg-gray-100 px-4 py-2 rounded-lg transition-colors download_open">
-                                    <i data-lucide="folder-open" class="w-4 h-4 mr-2"></i>
-                                    Open
-                                </a>
-                                @endif
-                            </div>
-                        </td>
-                    </tr>
-                    @empty
-                    <tr>
-                        <td colspan="5" class="text-center py-16 text-gray-500">
-                            <i data-lucide="cloud-off" class="w-12 h-12 mx-auto text-gray-300"></i>
-                            <p class="mt-4 text-lg font-semibold text-gray-600">No activity found.</p>
-                            <p class="text-sm">Sync to fetch the latest files.</p>
-                        </td>
-                    </tr>
-                    @endforelse
+                {{-- In the table, replace the @forelse block with: --}}
+                <tbody id="folderTableBody">
+                    @include('admin.nse._folder_table_rows', [
+                    'contents' => $contents,
+                    'segment' => $segment,
+                    'folder' => $folder,
+                    ])
                 </tbody>
             </table>
         </div>
@@ -261,10 +183,15 @@ $path = '';
         <i data-lucide="x" class="w-5 h-5"></i>
     </button>
 </div>
+<span id="syncStatusBadge" class="hidden flex items-center gap-1 text-xs text-blue-500 font-medium mr-1">
+    <i data-lucide="loader-circle" class="w-3 h-3 animate-spin"></i>
+    Syncing...
+</span>
 @endsection
 
 @section('script')
 <script>
+    // ─── Toast Mixin ─────────────────────────────────────────────────────────
     const Toast = Swal.mixin({
         toast: true,
         position: 'top-end',
@@ -272,195 +199,173 @@ $path = '';
         timer: 3000,
         timerProgressBar: true,
         didOpen: (toast) => {
-            toast.addEventListener('mouseenter', Swal.stopTimer)
-            toast.addEventListener('mouseleave', Swal.resumeTimer)
+            toast.addEventListener('mouseenter', Swal.stopTimer);
+            toast.addEventListener('mouseleave', Swal.resumeTimer);
         }
     });
 
-    function triggerDownload(btn, id) {
-        const originalContent = btn.innerHTML;
-        btn.disabled = true;
-        btn.innerHTML =
-            `<i data-lucide="loader-circle" class="w-4 h-4 animate-spin mr-2"></i>`;
-        lucide.createIcons();
+    // ─── Background Sync on Page Load ────────────────────────────────────────
+    document.addEventListener('DOMContentLoaded', function () {
+        triggerBackgroundSync();
+    });
 
-        const url = "{{ route('nse.file.prepare', ['id' => ':id']) }}".replace(':id', id) + '?source=today';
+    function triggerBackgroundSync() {
+        const segment = "{{ $segment }}";
+        const folder  = "{{ $folder }}";
+        const badge   = document.getElementById('syncStatusBadge');
 
-        fetch(url, {
-                method: 'GET',
-                headers: {
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'Content-Type': 'application/json',
-                }
-            })
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                return response.json();
-            })
-            .then(data => {
-                if (data.success) {
-                    Toast.fire({
-                        icon: 'success',
-                        title: 'Downloading...'
-                    });
+        if (badge) badge.classList.remove('hidden');
 
-                    btn.innerHTML = `<i data-lucide="check-circle" class="w-5 h-5 text-success"></i>&nbsp;Downloaded`;
-                    lucide.createIcons();
-
-                    window.location.href = data.url;
-
-                    // setTimeout(() => {
-                    //     btn.disabled = false;
-                    //     btn.innerHTML = originalContent;
-                    // }, 2000);
-                } else {
-                    throw new Error('Download failed. Please Retry after some time.');
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-
-                Toast.fire({
-                    icon: 'error',
-                    title: 'Download Failed',
-                    text: 'Please Retry after some time.',
-                    timer: 5000,
-                    timerProgressBar: true,
-                    showConfirmButton: false
-                });
-
-                btn.innerHTML = `<i data-lucide="x" class="w-4 h-4 mr-2"></i>`;
-                lucide.createIcons();
-
-                setTimeout(() => {
-                    btn.disabled = false;
-                    btn.innerHTML = originalContent;
-                }, 3000);
-            });
+        fetch("{{ route('nse.sync.background', ['segment' => ':seg']) }}".replace(':seg', segment), {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+            },
+            body: JSON.stringify({ folder: folder })
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (badge) badge.classList.add('hidden');
+            if (data.status === 'ok') {
+                refreshFolderTable(segment, folder, data.lastSynced);
+            }
+            // 'in_progress' → silently skip
+        })
+        .catch(() => {
+            if (badge) badge.classList.add('hidden');
+        });
     }
 
-    function syncNow(segment, folder) {
-        window.location.reload();
-        return;
-        const lastSynced = new Date();
-        const target = new Date(lastSynced.getTime() + 30 * 60 * 1000);
+    // ─── Refresh Folder Table via AJAX ───────────────────────────────────────
+    function refreshFolderTable(segment, folder, lastSynced) {
+        const url = "{{ route('nse.folder.contents.ajax', ['segment' => ':seg']) }}"
+            .replace(':seg', segment) + '?folder=' + encodeURIComponent(folder);
 
-        const timer = setInterval(() => {
+        fetch(url, {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.status === 'ok') {
+                // Step 1: Inject fresh rows
+                document.getElementById('folderTableBody').innerHTML = data.html;
 
-            const now = new Date().getTime();
-            const distance = target - now;
+                // Step 2: Reinit using the master layout's shared function
+                // ✅ This is the only DataTables init — no double-init conflict
+                if (typeof window.initActivityTable === 'function') {
+                    window.initActivityTable();
+                }
 
-            if (distance <= 0) {
-                clearInterval(timer);
-                document.getElementById("countdown").innerHTML = "";
-                return;
+                // Step 3: Reinit Lucide icons
+                lucide.createIcons();
+
+                // Step 4: Update last synced text
+                if (lastSynced) {
+                    const syncedEl = document.querySelector('[data-last-synced]');
+                    if (syncedEl) syncedEl.textContent = lastSynced;
+                }
             }
+        })
+        .catch(() => {
+            // Silent fail — cached data remains visible
+        });
+    }
 
-            const minutes = Math.floor(distance / (1000 * 60));
-            const seconds = Math.floor((distance % (1000 * 60)) / 1000);
-
-            document.getElementById("countdown").innerHTML = "Sync Countdown Timer: " +
-                minutes.toString().padStart(2, '0') + ":" +
-                seconds.toString().padStart(2, '0');
-
-        }, 1000);
+    // ─── Manual Sync Now Button ───────────────────────────────────────────────
+    function syncNow(segment, folder) {
         const btn = document.querySelector('.btn-sync');
         const originalHtml = btn.innerHTML;
 
         btn.disabled = true;
-        btn.innerHTML =
-            '<i data-lucide="loader-circle" class="w-4 h-4 animate-spin"></i> REFRESHING...';
+        btn.innerHTML = '<i data-lucide="loader-circle" class="w-4 h-4 animate-spin"></i> SYNCING...';
         lucide.createIcons();
 
-        const url = "{{ route('nse.sync.clear', ['segment' => ':segment', 'folder' => ':folder']) }}".replace(
-            ':segment', segment).replace(':folder', folder);
+        fetch("{{ route('nse.sync.background', ['segment' => ':seg']) }}".replace(':seg', segment), {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+            },
+            body: JSON.stringify({ folder: folder })
+        })
+        .then(res => res.json())
+        .then(data => {
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
+            lucide.createIcons();
+
+            if (data.status === 'ok') {
+                Toast.fire({ icon: 'success', title: 'Sync completed. Refreshing...' });
+                refreshFolderTable(segment, folder, data.lastSynced);
+            } else if (data.status === 'in_progress') {
+                Toast.fire({ icon: 'info', title: 'Sync already in progress.' });
+            } else {
+                Toast.fire({ icon: 'error', title: 'Sync failed. Please retry.' });
+            }
+        })
+        .catch(() => {
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
+            lucide.createIcons();
+            Toast.fire({ icon: 'error', title: 'Something went wrong.' });
+        });
+    }
+
+    // ─── File Download ────────────────────────────────────────────────────────
+    function triggerDownload(btn, id) {
+        const originalContent = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = `<i data-lucide="loader-circle" class="w-4 h-4 animate-spin mr-2"></i>`;
+        lucide.createIcons();
+
+        const url = "{{ route('nse.file.prepare', ['id' => ':id']) }}"
+            .replace(':id', id) + '?source=today';
 
         fetch(url, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-                }
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    document.getElementById('syncProgressWrapper').classList.remove('hidden');
-
-                    Toast.fire({
-                        icon: 'info',
-                        title: 'Sync started...'
-                    });
-
-                    startProgressPolling(segment);
-                } else {
-                    Toast.fire({
-                        icon: 'error',
-                        title: 'Failed to clear cache.'
-                    });
-                    btn.disabled = false;
-                    btn.innerHTML = originalHtml;
-                    lucide.createIcons();
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                Toast.fire({
-                    icon: 'error',
-                    title: 'Something went wrong.'
-                });
-                btn.disabled = false;
-                btn.innerHTML = originalHtml;
+            method: 'GET',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => {
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            return response.json();
+        })
+        .then(data => {
+            if (data.success) {
+                Toast.fire({ icon: 'success', title: 'Downloading...' });
+                btn.innerHTML = `<i data-lucide="check-circle" class="w-5 h-5 text-success"></i>&nbsp;Downloaded`;
                 lucide.createIcons();
+                window.location.href = data.url;
+            } else {
+                throw new Error('Download failed.');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            Toast.fire({
+                icon: 'error',
+                title: 'Download Failed',
+                text: 'Please retry after some time.',
+                timer: 5000,
+                timerProgressBar: true,
+                showConfirmButton: false
             });
+            btn.innerHTML = `<i data-lucide="x" class="w-4 h-4 mr-2"></i>`;
+            lucide.createIcons();
+            setTimeout(() => {
+                btn.disabled = false;
+                btn.innerHTML = originalContent;
+            }, 3000);
+        });
     }
 
-
-    let progressInterval = null;
-
-    function startProgressPolling(segment) {
-
-        if (progressInterval) {
-            clearInterval(progressInterval);
-        }
-
-        progressInterval = setInterval(() => {
-
-            fetch("{{ route('nse.sync.progress', ['segment' => ':segment']) }}"
-                    .replace(':segment', segment))
-                .then(res => res.json())
-                .then(data => {
-
-                    const bar = document.getElementById('syncProgressBar');
-
-                    bar.style.width = data.percentage + '%';
-                    bar.innerText = data.percentage + '%';
-
-                    if (data.status === 'completed') {
-
-                        clearInterval(progressInterval);
-
-                        Toast.fire({
-                            icon: 'success',
-                            title: 'Sync Completed'
-                        });
-
-                        setTimeout(() => {
-                            window.location.reload();
-                        }, 1000);
-                    }
-                });
-
-        }, 2000);
-    }
-
+    // ─── Bulk Selection ───────────────────────────────────────────────────────
     function checkSelection() {
-        const checkboxes = document.querySelectorAll('.row-selector:checked');
-        const count = checkboxes.length;
-        const bar = document.getElementById('bulkActionBar');
-
+        const count = document.querySelectorAll('.row-selector:checked').length;
+        const bar   = document.getElementById('bulkActionBar');
         document.getElementById('selectedCount').innerText = count;
 
         if (count > 0) {
@@ -471,8 +376,7 @@ $path = '';
     }
 
     function toggleAll(masterCheckbox) {
-        const checkboxes = document.querySelectorAll('.row-selector');
-        checkboxes.forEach(cb => cb.checked = masterCheckbox.checked);
+        document.querySelectorAll('.row-selector').forEach(cb => cb.checked = masterCheckbox.checked);
         checkSelection();
     }
 
@@ -481,16 +385,13 @@ $path = '';
         checkSelection();
     }
 
+    // ─── Bulk Download ────────────────────────────────────────────────────────
     function downloadSelected() {
         const selectedCheckboxes = document.querySelectorAll('.row-selector:checked');
-        const selectedIds = Array.from(document.querySelectorAll('.row-selector:checked'))
-            .map(cb => cb.value);
+        const selectedIds = Array.from(selectedCheckboxes).map(cb => cb.value);
 
-        if (selectedIds.length === 0) {
-            Toast.fire({
-                icon: 'warning',
-                title: 'No files selected'
-            });
+        if (!selectedIds.length) {
+            Toast.fire({ icon: 'warning', title: 'No files selected' });
             return;
         }
 
@@ -502,70 +403,62 @@ $path = '';
         lucide.createIcons();
 
         fetch("{{ route('nse.member.download.bulk.prepare') }}", {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-                },
-                body: JSON.stringify({
-                    ids: selectedIds
-                })
-            })
-            .then(response => {
-                if (!response.ok) {
-                    return response.json().then(err => {
-                        throw new Error(err.message || 'Server Error');
-                    });
-                }
-                return response.json();
-            })
-            .then(data => {
-                if (data.success) {
-                    window.location.href = data.url;
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+            },
+            body: JSON.stringify({ ids: selectedIds })
+        })
+        .then(response => {
+            if (!response.ok) {
+                return response.json().then(err => { throw new Error(err.message || 'Server Error'); });
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.success) {
+                window.location.href = data.url;
 
-                    selectedCheckboxes.forEach(cb => {
-                        const row = cb.closest('tr');
-                        if (row) {
-                            const rowDownloadBtn = row.querySelector('button[onclick*="triggerDownload"]');
-                            if (rowDownloadBtn) {
-                                rowDownloadBtn.innerHTML = `<i data-lucide="check-circle" class="w-5 h-5 text-success"></i>&nbsp;Downloaded`;
-                                rowDownloadBtn.style.pointerEvents = 'none';
-                            }
+                selectedCheckboxes.forEach(cb => {
+                    const row = cb.closest('tr');
+                    if (row) {
+                        const rowDownloadBtn = row.querySelector('button[onclick*="triggerDownload"]');
+                        if (rowDownloadBtn) {
+                            rowDownloadBtn.innerHTML = `<i data-lucide="check-circle" class="w-5 h-5 text-success"></i>&nbsp;Downloaded`;
+                            rowDownloadBtn.style.pointerEvents = 'none';
                         }
-                    });
-                    lucide.createIcons();
-
-                    Toast.fire({
-                        icon: 'success',
-                        title: 'Download started!'
-                    });
-
-                    setTimeout(() => {
-                        btn.disabled = false;
-                        btn.innerHTML = originalHtml;
-                        lucide.createIcons();
-                        clearSelection();
-                    }, 2000);
-                } else {
-                    throw new Error('Download failed. Please Retry after some time.');
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-
-                Toast.fire({
-                    icon: 'error',
-                    title: 'Download Failed',
-                    text: 'Please Retry after some time.',
-                    timer: 5000,
-                    timerProgressBar: true,
-                    showConfirmButton: false
+                    }
                 });
-
-                btn.disabled = false;
-                btn.innerHTML = originalHtml;
                 lucide.createIcons();
+
+                Toast.fire({ icon: 'success', title: 'Download started!' });
+
+                setTimeout(() => {
+                    btn.disabled = false;
+                    btn.innerHTML = originalHtml;
+                    lucide.createIcons();
+                    clearSelection();
+                }, 2000);
+
+            } else {
+                throw new Error('Download failed.');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            Toast.fire({
+                icon: 'error',
+                title: 'Download Failed',
+                text: 'Please retry after some time.',
+                timer: 5000,
+                timerProgressBar: true,
+                showConfirmButton: false
             });
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
+            lucide.createIcons();
+        });
     }
 </script>
 @endsection

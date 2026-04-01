@@ -433,78 +433,75 @@
                     setTimeout(() => {
                         preloader.style.display = "none";
                         document.body.classList.remove("loading");
-                    }, 500);
+                    }, 100);
                 }, remaining);
             }
 
             showPreloader();
 
+            // In master blade — replace the DataTable init block with this:
             if ($('#activityTable').length) {
-                let isInitialized = false; // ✅ Flag to skip first draw
+                let isInitialized = false;
 
-                var table = $('#activityTable').DataTable({
-                    "pageLength": 10,
-                    "order": [
-                        [1, "desc"],
-                        [4, "desc"]
-                    ],
-                    "columnDefs": [{
-                        "orderable": false,
-                        "targets": [0, 5]
-                    }],
-                    "language": {
-                        "search": "Search files:",
-                        "emptyTable": "No activity found. Sync to fetch the latest files.",
-                        paginate: {
-                            previous: '<i class="fa fa-angle-left"></i>',
-                            next: '<i class="fa fa-angle-right"></i>'
-                        }
-                    },
-                    "preDrawCallback": function() {
-                        // ✅ Skip first draw — preloader already shown manually
-                        if (!isInitialized) return;
-                        showPreloader();
-                    },
-                    "drawCallback": function() {
-                        hidePreloader();
-                        if (typeof lucide !== 'undefined') {
-                            lucide.createIcons();
-                        }
-                    },
-                    "initComplete": function() {
-                        isInitialized = true; // ✅ Mark init done
-                        hidePreloader();
-                        if (typeof lucide !== 'undefined') {
-                            lucide.createIcons();
-                        }
-                    }
-                });
-
-                // ✅ Detach DataTables' native input listener to prevent double search
-                $('#activityTable_filter input').off('keyup search input');
-
-                let searchTimeout = null;
-
-                $('#activityTable_filter input').on('keyup input', function() {
-                    const query = this.value.trim();
-
-                    clearTimeout(searchTimeout);
-
-                    if (query.length === 0) {
-                        table.search('').draw();
-                        return;
+                // ✅ Named global function — can be called from child blade after AJAX refresh
+                window.initActivityTable = function() {
+                    if ($.fn.DataTable.isDataTable('#activityTable')) {
+                        $('#activityTable').DataTable().destroy();
                     }
 
-                    if (query.length < 3) {
-                        return; // Do nothing under 3 chars
-                    }
+                    isInitialized = false; // reset flag on each init
 
-                    showPreloader();
+                    var table = $('#activityTable').DataTable({
+                        "pageLength": 10,
+                        "order": [
+                            [1, "desc"],
+                            [4, "desc"]
+                        ],
+                        "columnDefs": [{
+                            "orderable": false,
+                            "targets": [0, 5]
+                        }],
+                        "language": {
+                            "search": "Search files:",
+                            "emptyTable": "No activity found. Sync to fetch the latest files.",
+                            paginate: {
+                                previous: '<i class="fa fa-angle-left"></i>',
+                                next: '<i class="fa fa-angle-right"></i>'
+                            }
+                        },
+                        "preDrawCallback": function() {
+                            if (!isInitialized) return;
+                            showPreloader();
+                        },
+                        "drawCallback": function() {
+                            hidePreloader();
+                            if (typeof lucide !== 'undefined') lucide.createIcons();
+                        },
+                        "initComplete": function() {
+                            isInitialized = true;
+                            hidePreloader();
+                            if (typeof lucide !== 'undefined') lucide.createIcons();
 
-                    searchTimeout = setTimeout(() => {
-                        table.search(query).draw();
-                    }, 300);
-                });
+                            // ✅ Debounced search — reattach after every init
+                            $('#activityTable_filter input').off('keyup search input');
+                            let searchTimeout = null;
+                            $('#activityTable_filter input').on('keyup input', function() {
+                                const query = this.value.trim();
+                                clearTimeout(searchTimeout);
+                                if (query.length === 0) {
+                                    table.search('').draw();
+                                    return;
+                                }
+                                if (query.length < 3) return;
+                                showPreloader();
+                                searchTimeout = setTimeout(() => table.search(query).draw(), 100);
+                            });
+                        }
+                    });
+                };
+
+                // Initial call on page load
+                window.initActivityTable();
 
             } else {
                 hidePreloader();

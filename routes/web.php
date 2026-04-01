@@ -7,6 +7,7 @@ use App\Http\Controllers\Admin\BSEController;
 use App\Http\Controllers\Admin\NSEController;
 use App\Http\Controllers\Admin\NSELogController;
 use App\Http\Controllers\Admin\NSECommanController;
+use App\Http\Controllers\Admin\NSEDownloadController;
 
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Route;
@@ -23,7 +24,7 @@ use Illuminate\Support\Facades\Route;
 */
 
 // Route::get('/pass', function () {
-//     echo Illuminate\Support\Facades\Hash::make('Acme@54321');
+//     echo Illuminate\Support\Facades\Hash::make('123456');
 // });
 
 // Authenticated routes
@@ -71,6 +72,20 @@ Route::get('/nse/sync/progress/{segment}', function ($segment) {
 
 
         Route::get('/nse/logs/{type}/{segment}', [NSELogController::class, 'index'])->name('nse.logs.index');
+
+
+        //NSE AutoDownloader
+        Route::get('/nse/auto-download/', [NSEDownloadController::class, 'index'])->name('nse.downloads.index');
+        Route::post('/nse/auto-download/save', [NSEDownloadController::class, 'store'])->name('nse.downloads.save');
+
+        // Background sync — called by AJAX on page load
+        Route::post('/nse/{segment}/sync-bg', [NseController::class, 'syncBackground'])
+            ->name('nse.sync.background');
+
+        // Folder contents re-fetch — called by AJAX after sync completes
+        Route::get('/nse/{segment}/contents', [NseController::class, 'getFolderContentsAjax'])
+            ->name('nse.folder.contents.ajax');
+
 
         // BSE
         // Route::get('/files/bse', [BSEController::class, 'index'])->name('bse.index');
