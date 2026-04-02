@@ -30,15 +30,15 @@ use Illuminate\Support\Facades\Route;
 // Authenticated routes
 Route::group(['middleware' => 'auth'], function () {
 
-Route::get('/nse/sync/progress/{segment}', function ($segment) {
-    $progress = Cache::get("nse_sync_progress_{$segment}");
-            return response()->json($progress ?? [
-                'current' => 0,
-                'total' => 0,
-                'percentage' => 0,
-                'status' => 'idle'
-            ]);
-        })->name('nse.sync.progress');
+    Route::get('/nse/sync/progress/{segment}', function ($segment) {
+        $progress = Cache::get("nse_sync_progress_{$segment}");
+        return response()->json($progress ?? [
+            'current' => 0,
+            'total' => 0,
+            'percentage' => 0,
+            'status' => 'idle'
+        ]);
+    })->name('nse.sync.progress');
     // Admin prefix routes
     Route::group(['middleware' => 'auth', 'prefix' => 'admin'], function () {
         // Access only for admin
@@ -50,7 +50,6 @@ Route::get('/nse/sync/progress/{segment}', function ($segment) {
         // NSE
         Route::get('/files/nse', [NSEController::class, 'index'])->name('nse.index');
         Route::get('/files/nse/{segment}', [NSEController::class, 'getSegment'])->name('nse.segment');
-        Route::get('/files/nse/common/{segment}/{folder}/today', [NSECommanController::class, 'getTodaySegmentFolder'])->name('nse.common.segment.folder.today');
         Route::get('/files/nse/{segment}/{folder}/today', [NSEController::class, 'getTodaySegmentFolder'])->name('nse.segment.folder.today');
         Route::get('/files/nse/{segment}/{folder}/archives', [NSEController::class, 'getArchiveSegmentFolder'])->name('nse.segment.archives');
         Route::get('/files/nse/common/{segment}/{folder}/archives', [NSECommanController::class, 'getArchiveSegmentFolder'])->name('nse.common.segment.archives');
@@ -85,6 +84,21 @@ Route::get('/nse/sync/progress/{segment}', function ($segment) {
         // Folder contents re-fetch — called by AJAX after sync completes
         Route::get('/nse/{segment}/contents', [NseController::class, 'getFolderContentsAjax'])
             ->name('nse.folder.contents.ajax');
+
+        // routes/web.php
+
+        // Common Segment Routes
+        Route::prefix('nse/common')->name('nse.common.')->group(function () {
+
+            Route::get('/{segment}/{folder}', [NSECommanController::class, 'getTodaySegmentFolder'])
+                ->name('segment.folder.today');
+
+            Route::post('/{segment}/sync-background', [NSECommanController::class, 'syncBackground'])
+                ->name('sync.background');
+
+            Route::get('/{segment}/contents', [NSECommanController::class, 'getFolderContentsAjax'])
+                ->name('folder.contents.ajax');
+        });
 
 
         // BSE
