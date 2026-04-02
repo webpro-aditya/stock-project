@@ -154,7 +154,7 @@ $path = '';
                         <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
                         <span class="relative inline-flex h-2 w-2 rounded-full bg-indigo-500"></span>
                     </span>
-                    <span class="text-xs font-semibold text-indigo-600 whitespace-nowrap">Syncing in background</span>
+                    <span class="text-xs font-semibold text-indigo-600 whitespace-nowrap">Syncing</span>
                     {{-- Animated dots --}}
                     <span class="flex gap-0.5 items-center" id="syncDots">
                         <span class="w-1 h-1 rounded-full bg-indigo-400 animate-bounce" style="animation-delay:0ms"></span>
