@@ -433,8 +433,8 @@
                     setTimeout(() => {
                         preloader.style.display = "none";
                         document.body.classList.remove("loading");
-                    }, 100);
-                }, remaining);
+                    }, 10);
+                }, 100);
             }
 
             showPreloader();
@@ -494,7 +494,7 @@
                                 }
                                 if (query.length < 3) return;
                                 showPreloader();
-                                searchTimeout = setTimeout(() => table.search(query).draw(), 100);
+                                searchTimeout = setTimeout(() => table.search(query).draw(), 10);
                             });
                         }
                     });
