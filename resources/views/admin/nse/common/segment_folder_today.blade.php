@@ -90,7 +90,7 @@
                         <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
                         <span class="relative inline-flex h-2 w-2 rounded-full bg-indigo-500"></span>
                     </span>
-                    <span class="text-xs font-semibold text-indigo-600 whitespace-nowrap">Syncing in background</span>
+                    <span class="text-xs font-semibold text-indigo-600 whitespace-nowrap">Syncing</span>
                     <span class="flex gap-0.5 items-center" id="syncDots">
                         <span class="w-1 h-1 rounded-full bg-indigo-400 animate-bounce" style="animation-delay:0ms"></span>
                         <span class="w-1 h-1 rounded-full bg-indigo-400 animate-bounce" style="animation-delay:150ms"></span>
@@ -108,7 +108,15 @@
         </div>
 
         <div class="relative overflow-x-auto">
-            {{-- ✅ Always render id="activityTable" --}}
+            {{--
+                COLUMN COUNT = 5:
+                0 = Checkbox
+                1 = Folder / File Name
+                2 = Created
+                3 = Last Updated
+                4 = Action
+                ✅ Hidden Type <th> REMOVED to match <td> count in rows
+            --}}
             <table class="text-sm NseSegmentTable text-left" id="activityTable">
                 <thead class="text-xs text-gray-700 font-bold uppercase bg-gray-100 sticky top-0">
                     <tr>
@@ -116,7 +124,7 @@
                             <input type="checkbox" onchange="toggleAll(this)"
                                 class="w-4 h-4 custom-checkbox rounded border-gray-300">
                         </th>
-                        <th class="px-6 py-3" style="display:none;">Type</th>
+                        <th scope="col" class="px-6 py-3" style="display: none;">Type</th>
                         <th class="px-6 py-3 folder_col">Folder / File Name</th>
                         <th class="px-6 py-3 CreatedDate">Created</th>
                         <th class="px-6 py-3 LastUpdate">Last Updated</th>
@@ -164,14 +172,11 @@
         }
     });
 
-    // ─── Background Sync on Page Load ────────────────────────────────────────
     document.addEventListener('DOMContentLoaded', function () {
-        // ✅ Skip sync if last synced within 5 minutes
         const lastSynced = parseInt("{{ $lastSynced ? \Carbon\Carbon::parse($lastSynced)->timestamp : 0 }}");
         const fiveMinutesAgo = Math.floor(Date.now() / 1000) - (5 * 60);
         if (lastSynced > fiveMinutesAgo) return;
-
-        setTimeout(triggerBackgroundSync, 2000); // ✅ 2s debounce
+        setTimeout(triggerBackgroundSync, 2000);
     });
 
     function triggerBackgroundSync() {
@@ -194,7 +199,6 @@
         .then(res => res.json())
         .then(data => {
             if (badge) badge.style.display = 'none';
-
             if (data.status === 'ok') {
                 refreshFolderTable(segment, folder, data.lastSynced);
                 if (doneBadge) {
@@ -208,7 +212,6 @@
         });
     }
 
-    // ─── Refresh Folder Table via AJAX ────────────────────────────────────────
     function refreshFolderTable(segment, folder, lastSynced) {
         const url = "{{ route('nse.common.folder.contents.ajax', ['segment' => ':seg']) }}"
             .replace(':seg', segment) + '?folder=' + encodeURIComponent(folder);
@@ -219,23 +222,23 @@
             if (data.status === 'ok') {
                 const tbody = document.getElementById('folderTableBody');
                 if (!tbody) return;
-                tbody.innerHTML = data.html;
 
-                // Ensure table always has id before DataTables init
-                const table = tbody.closest('table');
-                if (table && !table.id) table.id = 'activityTable';
+                // ✅ Destroy existing DataTable before replacing HTML
+                if ($.fn.DataTable.isDataTable('#activityTable')) {
+                    $('#activityTable').DataTable().destroy();
+                }
+
+                tbody.innerHTML = data.html;
 
                 if (typeof window.initActivityTable === 'function') {
                     window.initActivityTable();
                 }
-
                 if (typeof lucide !== 'undefined') lucide.createIcons();
             }
         })
         .catch(() => {});
     }
 
-    // ─── Manual Sync Now ─────────────────────────────────────────────────────
     function syncNow(segment, folder) {
         const btn = document.querySelector('.btn-sync');
         const originalHtml = btn.innerHTML;
@@ -275,7 +278,6 @@
         });
     }
 
-    // ─── Download, Bulk, Selection — unchanged from member segment ───────────
     function triggerDownload(btn, id) {
         const originalContent = btn.innerHTML;
         btn.disabled = true;
@@ -335,15 +337,26 @@
 
         fetch("{{ route('nse.common.download.bulk.prepare') }}", {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content },
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+            },
             body: JSON.stringify({ ids: selectedIds })
         })
-        .then(response => { if (!response.ok) return response.json().then(err => { throw new Error(err.message); }); return response.json(); })
+        .then(response => {
+            if (!response.ok) return response.json().then(err => { throw new Error(err.message); });
+            return response.json();
+        })
         .then(data => {
             if (data.success) {
                 window.location.href = data.url;
                 Toast.fire({ icon: 'success', title: 'Download started!' });
-                setTimeout(() => { btn.disabled = false; btn.innerHTML = originalHtml; lucide.createIcons(); clearSelection(); }, 2000);
+                setTimeout(() => {
+                    btn.disabled = false;
+                    btn.innerHTML = originalHtml;
+                    lucide.createIcons();
+                    clearSelection();
+                }, 2000);
             } else throw new Error();
         })
         .catch(() => {
