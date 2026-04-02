@@ -172,11 +172,8 @@
         }
     });
 
-    document.addEventListener('DOMContentLoaded', function () {
-        const lastSynced = parseInt("{{ $lastSynced ? \Carbon\Carbon::parse($lastSynced)->timestamp : 0 }}");
-        const fiveMinutesAgo = Math.floor(Date.now() / 1000) - (5 * 60);
-        if (lastSynced > fiveMinutesAgo) return;
-        setTimeout(triggerBackgroundSync, 2000);
+    document.addEventListener('DOMContentLoaded', function() {
+        triggerBackgroundSync();
     });
 
     function triggerBackgroundSync() {
