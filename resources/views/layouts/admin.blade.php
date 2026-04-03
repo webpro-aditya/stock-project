@@ -13,7 +13,7 @@
     </title>
     <link href="{{ asset('css/styles.css?v1') }}" rel="stylesheet" />
     <link rel="preconnect" href='https://fonts.googleapis.com/css?family=Poppins' rel='stylesheet'>
-    {{--<script src="{{ asset('js/font-awesome.js') }}" defer crossorigin="anonymous"></script>--}}
+    <script src="{{ asset('js/font-awesome.js') }}" defer crossorigin="anonymous"></script>
     {{--<link href="{{ asset('css/bootstrap.min.css') }}" rel="stylesheet"
         integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">--}}
     <!-- Font Awesome Icons -->
