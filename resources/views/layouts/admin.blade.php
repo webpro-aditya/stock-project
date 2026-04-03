@@ -13,9 +13,9 @@
     </title>
     <link href="{{ asset('css/styles.css?v1') }}" rel="stylesheet" />
     <link rel="preconnect" href='https://fonts.googleapis.com/css?family=Poppins' rel='stylesheet'>
-    <script src="{{ asset('js/font-awesome.js') }}" defer crossorigin="anonymous"></script>
-    <link href="{{ asset('css/bootstrap.min.css') }}" rel="stylesheet"
-        integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
+    {{--<script src="{{ asset('js/font-awesome.js') }}" defer crossorigin="anonymous"></script>--}}
+    {{--<link href="{{ asset('css/bootstrap.min.css') }}" rel="stylesheet"
+        integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">--}}
     <!-- Font Awesome Icons -->
     <link rel="stylesheet" href="{{ asset('css/sweetalert2.min.css') }}">
     <script src="{{ asset('js/tailwind.js') }}"></script>
@@ -375,9 +375,9 @@
     <script src="{{ asset('js/jquery.min.js') }}"></script>
     <script src="{{ asset('js/lucide.min.js') }}"></script>
     <!-- Bootstrap Bundle Js -->
-    <script src="{{ asset('js/bootstrap.bundle.min.js') }}"></script>
+    {{--<script src="{{ asset('js/bootstrap.bundle.min.js') }}"></script>--}}
     <script src="{{ asset('js/sweetalert2@11.js') }}"></script>
-    <script src="{{ asset('js/jquery.dataTables.min.js') }}"></script>
+    <script src="{{ asset('js/jquery.dataTables.min.js') }}" defer></script>
     <script>
         // 1. Initialize Icons
         lucide.createIcons();
