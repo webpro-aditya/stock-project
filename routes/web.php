@@ -1,14 +1,13 @@
 <?php
 
+use App\Http\Controllers\Admin\BSEController;
+use App\Http\Controllers\Admin\NSECommanController;
+use App\Http\Controllers\Admin\NSEController;
+use App\Http\Controllers\Admin\NSEDownloadController;
+use App\Http\Controllers\Admin\NSELogController;
 use App\Http\Controllers\AdminController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\HomeController;
-use App\Http\Controllers\Admin\BSEController;
-use App\Http\Controllers\Admin\NSEController;
-use App\Http\Controllers\Admin\NSELogController;
-use App\Http\Controllers\Admin\NSECommanController;
-use App\Http\Controllers\Admin\NSEDownloadController;
-
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Route;
 
@@ -32,11 +31,12 @@ Route::group(['middleware' => 'auth'], function () {
 
     Route::get('/nse/sync/progress/{segment}', function ($segment) {
         $progress = Cache::get("nse_sync_progress_{$segment}");
+
         return response()->json($progress ?? [
             'current' => 0,
             'total' => 0,
             'percentage' => 0,
-            'status' => 'idle'
+            'status' => 'idle',
         ]);
     })->name('nse.sync.progress');
     // Admin prefix routes
@@ -69,11 +69,9 @@ Route::group(['middleware' => 'auth'], function () {
         Route::get('/nse/download/bulk/serve/{filename}', [NSEController::class, 'serveBulkZip'])->name('nse.bulk.serve');
         Route::get('/nse/common/download/bulk/serve/{filename}', [NSECommanController::class, 'serveBulkZip'])->name('nse.common.bulk.serve');
 
-
         Route::get('/nse/logs/{type}/{segment}', [NSELogController::class, 'index'])->name('nse.logs.index');
 
-
-        //NSE AutoDownloader
+        // NSE AutoDownloader
         Route::get('/nse/auto-download/', [NSEDownloadController::class, 'index'])->name('nse.downloads.index');
         Route::post('/nse/auto-download/save', [NSEDownloadController::class, 'store'])->name('nse.downloads.save');
 
@@ -93,13 +91,15 @@ Route::group(['middleware' => 'auth'], function () {
             Route::get('/{segment}/{folder}', [NSECommanController::class, 'getTodaySegmentFolder'])
                 ->name('segment.folder.today');
 
+            Route::get('/{segment}/{folder}/data', [NSECommanController::class, 'getServerSideDataTable'])
+                ->name('datatable');
+
             Route::post('/{segment}/sync-background', [NSECommanController::class, 'syncBackground'])
                 ->name('sync.background');
 
             Route::get('/{segment}/contents', [NSECommanController::class, 'getFolderContentsAjax'])
                 ->name('folder.contents.ajax');
         });
-
 
         // BSE
         // Route::get('/files/bse', [BSEController::class, 'index'])->name('bse.index');
@@ -118,10 +118,8 @@ Route::group(['middleware' => 'guest'], function () {
     Route::get('/register', [HomeController::class, 'register'])->name('register');
     Route::post('/register', [AdminController::class, 'createUser'])->name('createUser');
 
-
-
     Route::get('/thanks', [HomeController::class, 'thanks'])->name('page.thanks');
 
-    //Page Not Found
+    // Page Not Found
     // Route::fallback([PageController::class, 'pageNotFound'])->name('pageNotFound');
 });

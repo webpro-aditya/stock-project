@@ -3,26 +3,25 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\SyncJob;
-use App\Models\NseCommanContent;
-use App\Jobs\SyncBseFileJob;
-use App\Jobs\SyncBseFolders;
-use App\Jobs\SyncNseCommonFileJob;
 use App\Jobs\SyncNseCommaonFolders;
+use App\Jobs\SyncNseCommonFileJob;
+use App\Models\NseCommanContent;
+use App\Models\SyncJob;
+use App\Services\NSECommanService;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
-use App\Services\NSECommanService;
-use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Session;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use ZipArchive;
 
 class NSECommanController extends Controller
 {
-    private $nseCommanService, $perPage;
+    private $nseCommanService;
+
+    private $perPage;
 
     public function __construct(NSECommanService $nseCommanService)
     {
@@ -47,9 +46,9 @@ class NSECommanController extends Controller
     */
     public function getTodaySegmentFolder(Request $request, $segment, $folder)
     {
-        $segment       = Str::upper($segment);
+        $segment = Str::upper($segment);
         $currentFolder = $request->query('folder') ?? '';
-        $parent        = $currentFolder ?: 'root';
+        $parent = $currentFolder ?: 'root';
 
         // ✅ Single SyncJob query — upsert + reuse for lastSynced
         $syncJob = SyncJob::where('type', 'common')
@@ -61,7 +60,7 @@ class NSECommanController extends Controller
             $syncJob->touch();
         } else {
             $syncJob = SyncJob::create([
-                'type'    => 'common',
+                'type' => 'common',
                 'segment' => $segment,
             ]);
         }
@@ -76,10 +75,10 @@ class NSECommanController extends Controller
 
         $contents = Cache::remember($cacheKey, now()->addMinutes(15), function () use ($segment, $parent) {
             return NseCommanContent::select([
-                    'id', 'name', 'type', 'segment', 'path',
-                    'parent_folder', 'path',
-                    'nse_created_at', 'nse_modified_at', 'is_downloaded'
-                ])
+                'id', 'name', 'type', 'segment', 'path',
+                'parent_folder',
+                'nse_created_at', 'nse_modified_at', 'is_downloaded',
+            ])
                 ->where('segment', $segment)
                 ->where('parent_folder', $parent)
                 ->orderBy('type', 'DESC')
@@ -95,11 +94,129 @@ class NSECommanController extends Controller
         });
 
         return view('admin.nse.common.segment_folder_today', [
-            'segment'    => $segment,
-            'folder'     => $currentFolder,
-            'contents'   => $contents,
+            'segment' => $segment,
+            'folder' => $currentFolder,
+            'routeFolder' => $folder,
+            'contents' => $contents,
             'lastSynced' => $lastSyncedFormatted,
         ]);
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Server-side DataTables Endpoint
+    |--------------------------------------------------------------------------
+    */
+    public function getServerSideDataTable(Request $request, $segment, $folder)
+    {
+        $segment = Str::upper($segment);
+        $parent = $folder ?: 'root';
+
+        $query = NseCommanContent::query()
+            ->select([
+                'id', 'name', 'type', 'segment', 'path',
+                'parent_folder', 'nse_created_at', 'nse_modified_at', 'is_downloaded',
+            ])
+            ->where('segment', $segment)
+            ->where('parent_folder', $parent);
+
+        return datatables()->eloquent($query)
+            ->addColumn('checkbox', function ($item) {
+                if ($item->type == 'Folder') {
+                    return '';
+                }
+
+                return '<input type="checkbox" value="'.$item->id.'"
+                    onchange="checkSelection()"
+                    class="row-selector w-4 h-4 custom-checkbox rounded border-gray-300">';
+            })
+            ->editColumn('name', function ($item) {
+                $isFolder = $item->type == 'Folder';
+                $icon = $isFolder ? 'folder' : 'file';
+                $iconClass = $isFolder ? 'text-yellow-500 fill-yellow-500/20' : 'text-indigo-600';
+
+                if ($isFolder) {
+                    $url = 'folder='.$item->parent_folder.'/'.$item->name;
+                    $url = str_replace('root/', '', $url);
+                    $url = request()->fullUrl().'&'.$url;
+
+                    return '<div class="flex items-center gap-3">
+                        <div class="w-8 h-8 flex items-center justify-center bg-indigo-100 rounded-lg">
+                            <i data-lucide="'.$icon.'" class="w-5 h-5 '.$iconClass.'"></i>
+                        </div>
+                        <span class="break-all"><a href="'.$url.'" class="hover:text-brand">'.e($item->name).'</a></span>
+                    </div>';
+                }
+
+                return '<div class="flex items-center gap-3">
+                    <div class="w-8 h-8 flex items-center justify-center bg-indigo-100 rounded-lg">
+                        <i data-lucide="'.$icon.'" class="w-5 h-5 '.$iconClass.'"></i>
+                    </div>
+                    <span class="break-all">'.e($item->name).'</span>
+                </div>';
+            })
+            ->editColumn('nse_created_at', function ($item) {
+                return $item->nse_created_at
+                    ? $item->nse_created_at->setTimezone('Asia/Kolkata')->format('Y-m-d h:i a')
+                    : '';
+            })
+            ->editColumn('nse_modified_at', function ($item) {
+                $modifiedHtml = $item->nse_modified_at
+                    ? $item->nse_modified_at->setTimezone('Asia/Kolkata')->format('Y-m-d h:i a')
+                    : '';
+
+                $isModified = false;
+                $modifiedToday = false;
+
+                if ($item->nse_created_at && $item->nse_modified_at) {
+                    $afterCreation = $item->nse_modified_at->gt($item->nse_created_at);
+                    $modifiedToday = $item->nse_modified_at->isToday();
+                    $isModified = $afterCreation && $modifiedToday;
+                }
+
+                $badge = '';
+                if ($isModified) {
+                    $badge = '<span class="flex items-center gap-1.5 text-xs text-amber-600 font-semibold mt-0.5">
+                        <i data-lucide="alert-circle" class="w-3.5 h-3.5"></i> Modified
+                    </span>';
+                } elseif ($modifiedToday) {
+                    $badge = '<span class="flex items-center gap-1.5 text-xs text-amber-600 font-semibold mt-0.5">
+                        <i data-lucide="alert-circle" class="w-3.5 h-3.5"></i> New
+                    </span>';
+                }
+
+                return '<div class="flex flex-col">
+                    <span>'.$modifiedHtml.'</span>
+                    '.$badge.'
+                </div>';
+            })
+            ->addColumn('action', function ($item) {
+                $isFolder = $item->type == 'Folder';
+
+                if ($isFolder) {
+                    $url = 'folder='.$item->parent_folder.'/'.$item->name;
+                    $url = str_replace('root/', '', $url);
+                    $url = request()->fullUrl().'&'.$url;
+
+                    return '<div class="flex items-center gap-3">
+                        <a href="'.$url.'"
+                            class="inline-flex items-center font-semibold text-sm text-gray-700 bg-white border border-gray-300 hover:bg-gray-100 px-4 py-2 rounded-lg transition-colors">
+                            <i data-lucide="folder-open" class="w-4 h-4 mr-2"></i>
+                            Open
+                        </a>
+                    </div>';
+                }
+
+                return '<div class="flex items-center gap-3">
+                    <button onclick="triggerDownload(this, '.$item->id.')"
+                        class="inline-flex items-center font-semibold text-sm text-gray-700 bg-white border border-gray-300 hover:bg-gray-100 px-4 py-2 rounded-lg transition-colors download_open">
+                        <i data-lucide="download" class="w-4 h-4 mr-2"></i>
+                        Download
+                    </button>
+                </div>';
+            })
+            ->rawColumns(['checkbox', 'name', 'nse_modified_at', 'action'])
+            ->make(true);
     }
 
     /*
@@ -110,11 +227,11 @@ class NSECommanController extends Controller
     public function syncBackground(Request $request, $segment)
     {
         $segment = Str::upper($segment);
-        $folder  = (string) ($request->input('folder') ?? '');
-        $parent  = $folder ?: 'root';
+        $folder = (string) ($request->input('folder') ?? '');
+        $parent = $folder ?: 'root';
 
-        $lockKey          = $this->buildLockKey($segment, $parent);
-        $cacheKey         = $this->buildCacheKey($segment, $parent);
+        $lockKey = $this->buildLockKey($segment, $parent);
+        $cacheKey = $this->buildCacheKey($segment, $parent);
         $modifiedCacheKey = $this->buildModifiedCacheKey($segment, $parent);
 
         // Prevent duplicate concurrent syncs
@@ -136,13 +253,13 @@ class NSECommanController extends Controller
             $lastSyncedFormatted = Carbon::now()->timezone('Asia/Kolkata')->format('h:i a');
 
             return response()->json([
-                'status'     => 'ok',
+                'status' => 'ok',
                 'lastSynced' => $lastSyncedFormatted,
             ]);
 
         } catch (\Throwable $e) {
             return response()->json([
-                'status'  => 'error',
+                'status' => 'error',
                 'message' => $e->getMessage(),
             ], 500);
 
@@ -159,18 +276,18 @@ class NSECommanController extends Controller
     public function getFolderContentsAjax(Request $request, $segment)
     {
         $segment = Str::upper($segment);
-        $folder  = $request->query('folder', '');
-        $parent  = $folder ?: 'root';
+        $folder = $request->query('folder', '');
+        $parent = $folder ?: 'root';
 
-        $cacheKey         = $this->buildCacheKey($segment, $parent);
+        $cacheKey = $this->buildCacheKey($segment, $parent);
         $modifiedCacheKey = $this->buildModifiedCacheKey($segment, $parent);
 
         $contents = Cache::remember($cacheKey, now()->addMinutes(15), function () use ($segment, $parent) {
             return NseCommanContent::select([
-                    'id', 'name', 'type', 'segment', 'path',
-                    'parent_folder', 'path',
-                    'nse_created_at', 'nse_modified_at', 'is_downloaded'
-                ])
+                'id', 'name', 'type', 'segment', 'path',
+                'parent_folder', 'path',
+                'nse_created_at', 'nse_modified_at', 'is_downloaded',
+            ])
                 ->where('segment', $segment)
                 ->where('parent_folder', $parent)
                 ->orderBy('type', 'DESC')
@@ -184,14 +301,14 @@ class NSECommanController extends Controller
 
         $html = view('admin.nse.common._folder_table_rows', [
             'contents' => $contents,
-            'segment'  => $segment,
-            'folder'   => $folder,
+            'segment' => $segment,
+            'folder' => $folder,
         ])->render();
 
         return response()->json([
-            'status'     => 'ok',
-            'html'       => $html,
-            'count'      => $contents->count(),
+            'status' => 'ok',
+            'html' => $html,
+            'count' => $contents->count(),
             'lastSynced' => Carbon::now()->timezone('Asia/Kolkata')->format('h:i a'),
         ]);
     }
@@ -219,17 +336,17 @@ class NSECommanController extends Controller
     */
     private function buildCacheKey(string $segment, string $parent): string
     {
-        return 'nse_common_contents_' . Str::slug($segment) . '_' . Str::slug($parent);
+        return 'nse_common_contents_'.Str::slug($segment).'_'.Str::slug($parent);
     }
 
     private function buildLockKey(string $segment, string $parent): string
     {
-        return 'nse_common_sync_lock_' . Str::slug($segment) . '_' . Str::slug($parent);
+        return 'nse_common_sync_lock_'.Str::slug($segment).'_'.Str::slug($parent);
     }
 
     private function buildModifiedCacheKey(string $segment, string $parent): string
     {
-        return 'nse_common_modified_' . Str::slug($segment) . '_' . Str::slug($parent);
+        return 'nse_common_modified_'.Str::slug($segment).'_'.Str::slug($parent);
     }
 
     private function computeFolderModifiedTimes($contents, string $segment)
@@ -237,7 +354,7 @@ class NSECommanController extends Controller
         $folderPaths = $contents
             ->where('type', 'Folder')
             ->pluck('path')
-            ->map(fn($path) => Str::after($path, $segment . '/'))
+            ->map(fn ($path) => Str::after($path, $segment.'/'))
             ->toArray();
 
         if (empty($folderPaths)) {
@@ -254,10 +371,12 @@ class NSECommanController extends Controller
 
         return $contents->map(function ($item) use ($children, $segment) {
             // ✅ Skip non-folders immediately
-            if ($item->type !== 'Folder') return $item;
+            if ($item->type !== 'Folder') {
+                return $item;
+            }
 
-            $folderKey = Str::after($item->path, $segment . '/');
-            $child     = $children->get($folderKey);
+            $folderKey = Str::after($item->path, $segment.'/');
+            $child = $children->get($folderKey);
 
             if ($child && $child->latest_modified) {
                 $item->nse_modified_at = Carbon::parse($child->latest_modified);
@@ -280,7 +399,7 @@ class NSECommanController extends Controller
         if ($records->isEmpty()) {
             return view('admin.nse.common.segment_folder_archives', [
                 'segment' => $segment,
-                'treeByDate' => collect()
+                'treeByDate' => collect(),
             ]);
         }
 
@@ -309,10 +428,10 @@ class NSECommanController extends Controller
 
                 foreach ($parts as $index => $part) {
 
-                    if (!isset($current[$part])) {
+                    if (! isset($current[$part])) {
                         $current[$part] = [
                             '_meta' => null,
-                            'children' => []
+                            'children' => [],
                         ];
                     }
 
@@ -329,13 +448,13 @@ class NSECommanController extends Controller
 
         return view('admin.nse.common.segment_folder_archives', [
             'segment' => $segment,
-            'treeByDate' => $treeByDate
+            'treeByDate' => $treeByDate,
         ]);
     }
 
     public function clearArchiveFolderCache($segment, $folder)
     {
-        $cacheKey = "nse_sync_" . Str::slug($segment . '_' . $folder);
+        $cacheKey = 'nse_sync_'.Str::slug($segment.'_'.$folder);
 
         Cache::forget($cacheKey);
 
@@ -347,14 +466,14 @@ class NSECommanController extends Controller
         try {
             $authToken = $this->nseCommanService->getAuthToken();
 
-            if (!$authToken) {
+            if (! $authToken) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Authentication failed.'
+                    'message' => 'Authentication failed.',
                 ], 401);
             }
 
-            $source      = $request->query('source', 'today');
+            $source = $request->query('source', 'today');
             $archiveDate = $request->query('date');
 
             SyncNseCommonFileJob::dispatchSync($id, $authToken, $source, $archiveDate);
@@ -368,16 +487,15 @@ class NSECommanController extends Controller
 
             return response()->json([
                 'success' => true,
-                'url'     => route('nse.common.file.serve', $routeParams)
+                'url' => route('nse.common.file.serve', $routeParams),
             ]);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => $e->getMessage()
+                'message' => $e->getMessage(),
             ], 500);
         }
     }
-
 
     public function serveFile(Request $request, $id)  // ✅ Added Request $request
     {
@@ -388,8 +506,8 @@ class NSECommanController extends Controller
             ?? $fileRecord->created_at->format('Y-m-d');
 
         // ✅ No 'root' literally in path
-        $folderSegment = (!empty($fileRecord->parent_folder) && strtolower($fileRecord->parent_folder) !== 'root')
-            ? $fileRecord->parent_folder . '/'
+        $folderSegment = (! empty($fileRecord->parent_folder) && strtolower($fileRecord->parent_folder) !== 'root')
+            ? $fileRecord->parent_folder.'/'
             : '';
 
         // ✅ Strip .gz — actual file on disk is decompressed
@@ -397,13 +515,13 @@ class NSECommanController extends Controller
             ? substr($fileRecord->name, 0, -3)
             : $fileRecord->name;
 
-        $relativePath = 'common/' .
-            $dateFolder . '/' .
-            $fileRecord->segment . '/' .
-            $folderSegment .
+        $relativePath = 'common/'.
+            $dateFolder.'/'.
+            $fileRecord->segment.'/'.
+            $folderSegment.
             $storedName;
 
-        if (!Storage::exists($relativePath)) {
+        if (! Storage::exists($relativePath)) {
             Log::error("serveFile [common]: File not found at: $relativePath");
             abort(404, 'File not found.');
         }
@@ -411,8 +529,6 @@ class NSECommanController extends Controller
         // ✅ Serve with correct filename (no .gz)
         return Storage::download($relativePath, $storedName);
     }
-
-
 
     public function prepareBulkDownload(Request $request)
     {
@@ -422,7 +538,7 @@ class NSECommanController extends Controller
             if (empty($ids)) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'No files selected.'
+                    'message' => 'No files selected.',
                 ], 400);
             }
 
@@ -431,17 +547,17 @@ class NSECommanController extends Controller
             if ($files->isEmpty()) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Files not found in database.'
+                    'message' => 'Files not found in database.',
                 ], 404);
             }
 
             // ✅ Auth check ONCE before the loop, not inside it
             $authToken = $this->nseCommanService->getAuthToken();
 
-            if (!$authToken) {
+            if (! $authToken) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Authentication failed.'
+                    'message' => 'Authentication failed.',
                 ], 401);
             }
 
@@ -454,8 +570,8 @@ class NSECommanController extends Controller
                 $dateFolder = Carbon::parse($file->created_at)->format('Y-m-d');
 
                 // ✅ No 'root' in path
-                $folderSegment = (!empty($file->parent_folder) && strtolower($file->parent_folder) !== 'root')
-                    ? $file->parent_folder . '/'
+                $folderSegment = (! empty($file->parent_folder) && strtolower($file->parent_folder) !== 'root')
+                    ? $file->parent_folder.'/'
                     : '';
 
                 // ✅ Resolve actual stored name (.gz → .csv)
@@ -466,11 +582,11 @@ class NSECommanController extends Controller
                 $relativeFilePath = "common/{$dateFolder}/{$file->segment}/{$folderSegment}{$storedName}";
 
                 // ✅ Only sync if file is actually missing
-                if (!Storage::exists($relativeFilePath)) {
+                if (! Storage::exists($relativeFilePath)) {
                     try {
                         SyncNseCommonFileJob::dispatchSync($file->id, $authToken, 'today');
                     } catch (\Throwable $e) {
-                        Log::error("Failed to sync common file ID {$file->id}: " . $e->getMessage());
+                        Log::error("Failed to sync common file ID {$file->id}: ".$e->getMessage());
                     }
                 }
             }
@@ -480,11 +596,11 @@ class NSECommanController extends Controller
         | Create ZIP
         |------------------------------------------------------------------
         */
-            $zipFileName     = 'nse_common_bulk_' . now()->format('Ymd_His') . '_' . Str::random(6) . '.zip';
-            $relativeZipPath = 'nse_temp_zips/' . $zipFileName;
+            $zipFileName = 'nse_common_bulk_'.now()->format('Ymd_His').'_'.Str::random(6).'.zip';
+            $relativeZipPath = 'nse_temp_zips/'.$zipFileName;
             $absoluteZipPath = Storage::path($relativeZipPath);
 
-            if (!Storage::exists('nse_temp_zips')) {
+            if (! Storage::exists('nse_temp_zips')) {
                 Storage::makeDirectory('nse_temp_zips');
             }
 
@@ -493,7 +609,7 @@ class NSECommanController extends Controller
             if ($zip->open($absoluteZipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Failed to create ZIP archive.'
+                    'message' => 'Failed to create ZIP archive.',
                 ], 500);
             }
 
@@ -504,8 +620,8 @@ class NSECommanController extends Controller
                 $dateFolder = Carbon::parse($file->created_at)->format('Y-m-d');
 
                 // ✅ No 'root' in path
-                $folderSegment = (!empty($file->parent_folder) && strtolower($file->parent_folder) !== 'root')
-                    ? $file->parent_folder . '/'
+                $folderSegment = (! empty($file->parent_folder) && strtolower($file->parent_folder) !== 'root')
+                    ? $file->parent_folder.'/'
                     : '';
 
                 // ✅ Actual stored filename (no .gz)
@@ -515,8 +631,9 @@ class NSECommanController extends Controller
 
                 $relativeFilePath = "common/{$dateFolder}/{$file->segment}/{$folderSegment}{$storedName}";
 
-                if (!Storage::exists($relativeFilePath)) {
+                if (! Storage::exists($relativeFilePath)) {
                     Log::warning("Common bulk ZIP: File missing, skipping: $relativeFilePath");
+
                     continue;
                 }
 
@@ -528,8 +645,8 @@ class NSECommanController extends Controller
                 // ✅ Prevent duplicate filenames inside ZIP
                 if (in_array($zipName, $addedNames)) {
                     $zipName = pathinfo($storedName, PATHINFO_FILENAME)
-                        . '_' . $file->id . '.'
-                        . pathinfo($storedName, PATHINFO_EXTENSION);
+                        .'_'.$file->id.'.'
+                        .pathinfo($storedName, PATHINFO_EXTENSION);
                 }
 
                 $zip->addFile($absoluteFilePath, $zipName);
@@ -541,34 +658,37 @@ class NSECommanController extends Controller
 
             // ✅ Don't serve an empty ZIP
             if ($addedCount === 0) {
-                if (file_exists($absoluteZipPath)) unlink($absoluteZipPath);
+                if (file_exists($absoluteZipPath)) {
+                    unlink($absoluteZipPath);
+                }
+
                 return response()->json([
                     'success' => false,
-                    'message' => 'No files could be added to the ZIP.'
+                    'message' => 'No files could be added to the ZIP.',
                 ], 404);
             }
 
             return response()->json([
                 'success' => true,
-                'url'     => route('nse.common.bulk.serve', ['filename' => $zipFileName])
+                'url' => route('nse.common.bulk.serve', ['filename' => $zipFileName]),
             ]);
         } catch (\Throwable $e) {
-            Log::error("Common bulk download failed: " . $e->getMessage());
+            Log::error('Common bulk download failed: '.$e->getMessage());
+
             return response()->json([
                 'success' => false,
-                'message' => 'Bulk download failed: ' . $e->getMessage()
+                'message' => 'Bulk download failed: '.$e->getMessage(),
             ], 500);
         }
     }
 
-
     public function serveBulkZip($filename)
     {
         // ✅ Sanitize to prevent path traversal
-        $filename     = basename($filename);
-        $relativePath = 'nse_temp_zips/' . $filename;
+        $filename = basename($filename);
+        $relativePath = 'nse_temp_zips/'.$filename;
 
-        if (!Storage::exists($relativePath)) {
+        if (! Storage::exists($relativePath)) {
             Log::error("serveBulkZip [common]: ZIP not found: $relativePath");
             abort(404, 'ZIP file not found.'); // ✅ proper 404 instead of silent redirect
         }

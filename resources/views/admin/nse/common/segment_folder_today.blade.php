@@ -3,7 +3,8 @@
 @section('page_title', __('Extranet Sync - ' . Str::upper($segment)))
 
 @php
-    $folder = trim($folder ?? '', '/');
+    $folder = trim($folder ?? 'root', '/');
+    $folder = $folder === '' ? 'root' : $folder;
 @endphp
 
 @section('style')
@@ -132,11 +133,6 @@
                     </tr>
                 </thead>
                 <tbody id="folderTableBody">
-                    @include('admin.nse.common._folder_table_rows', [
-                        'contents' => $contents,
-                        'segment'  => $segment,
-                        'folder'   => $folder,
-                    ])
                 </tbody>
             </table>
         </div>
@@ -172,8 +168,75 @@
         }
     });
 
+    let dataTable = null;
+    let syncTriggered = false;
+
+    function initServerSideDataTable() {
+        if ($.fn.DataTable.isDataTable('#activityTable')) {
+            $('#activityTable').DataTable().destroy();
+        }
+
+        var table = $('#activityTable').DataTable({
+            "serverSide": true,
+            "processing": true,
+            "pageLength": 10,
+            "lengthMenu": [[10, 25, 50, 100], [10, 25, 50, 100]],
+            "ajax": {
+                "url": "{{ route('nse.common.datatable', ['segment' => $segment, 'folder' => $folder]) }}",
+                "type": "GET",
+                "dataSrc": function(json) {
+                    if (json.data) {
+                        return json.data;
+                    }
+                    return [];
+                },
+                "error": function(xhr, error, thrown) {
+                    console.log('DataTables AJAX Error:', error);
+                }
+            },
+            "columns": [
+                { "data": "checkbox", "name": "checkbox", "orderable": false, "searchable": false },
+                { "data": "type", "name": "type", "visible": false },
+                { "data": "name", "name": "name", "orderable": true, "searchable": true },
+                { "data": "nse_created_at", "name": "nse_created_at", "orderable": true, "searchable": false },
+                { "data": "nse_modified_at", "name": "nse_modified_at", "orderable": true, "searchable": false },
+                { "data": "action", "name": "action", "orderable": false, "searchable": false }
+            ],
+            "order": [[1, "desc"], [4, "desc"]],
+            "columnDefs": [
+                { "orderable": false, "targets": [0, 5] },
+                { "visible": false, "targets": [1] }
+            ],
+            "language": {
+                "processing": '<div class="flex items-center justify-center py-4"><i data-lucide="loader-circle" class="w-6 h-6 animate-spin text-brand"></i><span class="ml-2">Loading...</span></div>',
+                "search": "Search files:",
+                "emptyTable": "No activity found. Sync to fetch the latest files.",
+                "paginate": {
+                    "previous": '<i class="fa fa-angle-left"></i>',
+                    "next": '<i class="fa fa-angle-right"></i>'
+                },
+                "lengthMenu": "Show _MENU_ entries"
+            },
+            "drawCallback": function(settings) {
+                if (typeof lucide !== 'undefined') lucide.createIcons();
+            },
+            "initComplete": function(settings, json) {
+                if (typeof lucide !== 'undefined') lucide.createIcons();
+                if (!syncTriggered) {
+                    syncTriggered = true;
+                    setTimeout(function() {
+                        triggerBackgroundSync();
+                    }, 500);
+                }
+            }
+        });
+
+        dataTable = table;
+        return table;
+    }
+
     document.addEventListener('DOMContentLoaded', function() {
-        triggerBackgroundSync();
+        initServerSideDataTable();
     });
 
     function triggerBackgroundSync() {
@@ -197,7 +260,7 @@
         .then(data => {
             if (badge) badge.style.display = 'none';
             if (data.status === 'ok') {
-                refreshFolderTable(segment, folder, data.lastSynced);
+                reloadDataTable();
                 if (doneBadge) {
                     doneBadge.style.display = 'inline-flex';
                     setTimeout(() => { doneBadge.style.display = 'none'; }, 4000);
@@ -209,31 +272,10 @@
         });
     }
 
-    function refreshFolderTable(segment, folder, lastSynced) {
-        const url = "{{ route('nse.common.folder.contents.ajax', ['segment' => ':seg']) }}"
-            .replace(':seg', segment) + '?folder=' + encodeURIComponent(folder);
-
-        fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
-        .then(res => res.json())
-        .then(data => {
-            if (data.status === 'ok') {
-                const tbody = document.getElementById('folderTableBody');
-                if (!tbody) return;
-
-                // ✅ Destroy existing DataTable before replacing HTML
-                if ($.fn.DataTable.isDataTable('#activityTable')) {
-                    $('#activityTable').DataTable().destroy();
-                }
-
-                tbody.innerHTML = data.html;
-
-                if (typeof window.initActivityTable === 'function') {
-                    window.initActivityTable();
-                }
-                if (typeof lucide !== 'undefined') lucide.createIcons();
-            }
-        })
-        .catch(() => {});
+    function reloadDataTable() {
+        if (dataTable) {
+            dataTable.ajax.reload(null, false);
+        }
     }
 
     function syncNow(segment, folder) {
@@ -260,7 +302,7 @@
 
             if (data.status === 'ok') {
                 Toast.fire({ icon: 'success', title: 'Sync completed. Refreshing...' });
-                refreshFolderTable(segment, folder, data.lastSynced);
+                reloadDataTable();
             } else if (data.status === 'in_progress') {
                 Toast.fire({ icon: 'info', title: 'Sync already in progress.' });
             } else {

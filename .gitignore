@@ -18,3 +18,15 @@ yarn-error.log
 /.idea
 /.vscode
 /project_template.sql
+rr
+.rr.yaml
+
+**/caddy
+frankenphp
+frankenphp-worker.php
+
+**/caddy
+frankenphp
+frankenphp-worker.php
+rr
+.rr.yaml

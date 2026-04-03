@@ -440,7 +440,8 @@
             showPreloader();
 
             // In master blade — replace the DataTable init block with this:
-            if ($('#activityTable').length) {
+            if ($('#activityTable').length && !window.dataTableInitialized) {
+                window.dataTableInitialized = true;
                 let isInitialized = false;
 
                 // ✅ Named global function — can be called from child blade after AJAX refresh
