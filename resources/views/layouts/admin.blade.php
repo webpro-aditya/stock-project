@@ -409,7 +409,6 @@
     </script>
 
     <script>
-        /*
         $(document).ready(function() {
             const preloader = document.getElementById("preloader");
 
@@ -508,7 +507,6 @@
                 hidePreloader();
             }
         });
-        */
     </script>
     @yield('script')
 </body>

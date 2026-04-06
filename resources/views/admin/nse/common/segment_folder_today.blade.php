@@ -152,43 +152,30 @@ $folder = trim($folder ?? '', '/');
 
         <div class="overflow-x-auto">
             <table class="w-full text-sm">
-                <thead class="bg-gray-100 text-xs uppercase">
-                    <tr>
-                        <th class="px-4 py-3"></th>
-
-                        <th class="px-6 py-3">
-                            <a href="{{ request()->fullUrlWithQuery([
-                                'sort' => 'name',
-                                'direction' => request('direction') === 'asc' ? 'desc' : 'asc'
-                            ]) }}">
-                                Name
-                                @if(request('sort') == 'name')
-                                {{ request('direction') == 'asc' ? '↑' : '↓' }}
-                                @endif
-                            </a>
-                        </th>
-
-                        <th class="px-6 py-3">
-                            <a href="{{ request()->fullUrlWithQuery([
-                                'sort' => 'nse_created_at',
-                                'direction' => request('direction') === 'asc' ? 'desc' : 'asc'
-                            ]) }}">
-                                Created
-                            </a>
-                        </th>
-
-                        <th class="px-6 py-3">
-                            <a href="{{ request()->fullUrlWithQuery([
-                                'sort' => 'nse_modified_at',
-                                'direction' => request('direction') === 'asc' ? 'desc' : 'asc'
-                            ]) }}">
-                                Updated
-                            </a>
-                        </th>
-
-                        <th class="px-6 py-3 text-center">Action</th>
-                    </tr>
-                </thead>
+                <thead class="bg-gray-100 text-xs font-semibold uppercase tracking-wider text-gray-500">
+    <tr>
+        <th class="px-4 py-3 w-10">
+            <input type="checkbox" onchange="toggleAll(this)" class="w-4 h-4 rounded border-gray-300">
+        </th>
+        <th class="px-6 py-3 text-left">
+            <a href="{{ request()->fullUrlWithQuery(['sort' => 'name', 'direction' => request('direction') === 'asc' ? 'desc' : 'asc']) }}">
+                Folder / File Name
+                @if(request('sort') == 'name') {{ request('direction') == 'asc' ? '↑' : '↓' }} @endif
+            </a>
+        </th>
+        <th class="px-6 py-3 text-left">
+            <a href="{{ request()->fullUrlWithQuery(['sort' => 'nse_created_at', 'direction' => request('direction') === 'asc' ? 'desc' : 'asc']) }}">
+                Created
+            </a>
+        </th>
+        <th class="px-6 py-3 text-left">
+            <a href="{{ request()->fullUrlWithQuery(['sort' => 'nse_modified_at', 'direction' => request('direction') === 'asc' ? 'desc' : 'asc']) }}">
+                Last Updated
+            </a>
+        </th>
+        <th class="px-6 py-3 text-center">Action</th>
+    </tr>
+</thead>
 
                 <tbody>
                     @include('admin.nse.common._folder_table_rows', [
