@@ -244,6 +244,7 @@ $folder = trim($folder ?? '', '/');
                 if (badge) {
                     if (data.status === 'ok') {
                         badge.innerText = "Updated";
+                        window.reload();
                     } else if (data.status === 'in_progress') {
                         badge.innerText = "Already syncing...";
                     } else {
