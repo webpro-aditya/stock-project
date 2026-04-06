@@ -50,8 +50,13 @@ class NSECommanController extends Controller
         $segment       = Str::upper($segment);
         $currentFolder = $request->query('folder') ?? '';
         $parent        = $currentFolder ?: 'root';
+        $page          = (int) $request->query('page', 1);
 
-        // ✅ Single SyncJob query — upsert + reuse for lastSynced
+        /*
+    |--------------------------------------------------------------------------
+    | Sync Job
+    |--------------------------------------------------------------------------
+    */
         $syncJob = SyncJob::where('type', 'common')
             ->where('segment', $segment)
             ->whereDate('created_at', Carbon::today())
@@ -66,32 +71,49 @@ class NSECommanController extends Controller
             ]);
         }
 
-        // ✅ Reuse $syncJob — no second DB query
         $lastSyncedFormatted = Carbon::parse($syncJob->updated_at)
             ->timezone('Asia/Kolkata')
             ->format('Y-m-d h:i:s A');
 
-        // ✅ Serve from file cache with select()
-        $cacheKey = $this->buildCacheKey($segment, $parent);
+        /*
+    |--------------------------------------------------------------------------
+    | Page-aware cache key
+    |--------------------------------------------------------------------------
+    */
+        $cacheKey = "nse_common_{$segment}_" . md5($parent) . "_page_{$page}";
 
-        $contents = Cache::remember($cacheKey, now()->addMinutes(15), function () use ($segment, $parent) {
-            return NseCommanContent::select([
-                    'id', 'name', 'type', 'segment', 'path',
-                    'parent_folder', 'path',
-                    'nse_created_at', 'nse_modified_at', 'is_downloaded'
-                ])
+        $contents = Cache::remember($cacheKey, now()->addMinutes(10), function () use ($segment, $parent) {
+
+            $paginator = NseCommanContent::select([
+                'id',
+                'name',
+                'type',
+                'segment',
+                'path',
+                'parent_folder',
+                'nse_created_at',
+                'nse_modified_at',
+                'is_downloaded'
+            ])
                 ->where('segment', $segment)
                 ->where('parent_folder', $parent)
                 ->orderBy('type', 'DESC')
                 ->orderBy('nse_modified_at', 'DESC')
-                ->get();
-        });
+                ->paginate($this->perPage);
 
-        // ✅ Cache modified times computation too
-        $modifiedCacheKey = $this->buildModifiedCacheKey($segment, $parent);
+            /*
+        |--------------------------------------------------------------------------
+        | Apply folder modification logic
+        |--------------------------------------------------------------------------
+        */
+            $collection = $this->computeFolderModifiedTimes(
+                $paginator->getCollection(),
+                $segment
+            );
 
-        $contents = Cache::remember($modifiedCacheKey, now()->addMinutes(15), function () use ($contents, $segment) {
-            return $this->computeFolderModifiedTimes($contents, $segment);
+            $paginator->setCollection($collection);
+
+            return $paginator;
         });
 
         return view('admin.nse.common.segment_folder_today', [
@@ -113,39 +135,47 @@ class NSECommanController extends Controller
         $folder  = (string) ($request->input('folder') ?? '');
         $parent  = $folder ?: 'root';
 
-        $lockKey          = $this->buildLockKey($segment, $parent);
-        $cacheKey         = $this->buildCacheKey($segment, $parent);
-        $modifiedCacheKey = $this->buildModifiedCacheKey($segment, $parent);
+        $lockKey = $this->buildLockKey($segment, $parent);
 
-        // Prevent duplicate concurrent syncs
         if (Cache::has($lockKey)) {
             return response()->json(['status' => 'in_progress']);
         }
 
-        // Acquire lock for max 3 minutes
         Cache::put($lockKey, true, now()->addMinutes(3));
 
         try {
-            $this->syncMemberSegment($segment, $folder);
+            $this->syncCommonSegment($segment, $folder);
 
-            // ✅ Bust both cache keys
-            Cache::forget($cacheKey);
-            Cache::forget($modifiedCacheKey);
+            /*
+        |--------------------------------------------------------------------------
+        | Clear all cached pages for this segment + folder
+        |--------------------------------------------------------------------------
+        */
+            $totalRecords = NseCommanContent::where('segment', $segment)
+                ->where('parent_folder', $parent)
+                ->count();
 
-            // ✅ Use now() — no extra DB query needed
-            $lastSyncedFormatted = Carbon::now()->timezone('Asia/Kolkata')->format('h:i a');
+            $totalPages = max(1, ceil($totalRecords / $this->perPage));
+
+            for ($i = 1; $i <= $totalPages; $i++) {
+                $cacheKey = "nse_common_{$segment}_" . md5($parent) . "_page_{$i}";
+                Cache::forget($cacheKey);
+            }
+
+            $lastSyncedFormatted = Carbon::now()
+                ->timezone('Asia/Kolkata')
+                ->format('h:i a');
 
             return response()->json([
                 'status'     => 'ok',
                 'lastSynced' => $lastSyncedFormatted,
             ]);
-
         } catch (\Throwable $e) {
+
             return response()->json([
                 'status'  => 'error',
                 'message' => $e->getMessage(),
             ], 500);
-
         } finally {
             Cache::forget($lockKey);
         }
@@ -153,55 +183,10 @@ class NSECommanController extends Controller
 
     /*
     |--------------------------------------------------------------------------
-    | Folder Contents Endpoint — Called via AJAX after sync completes
-    |--------------------------------------------------------------------------
-    */
-    public function getFolderContentsAjax(Request $request, $segment)
-    {
-        $segment = Str::upper($segment);
-        $folder  = $request->query('folder', '');
-        $parent  = $folder ?: 'root';
-
-        $cacheKey         = $this->buildCacheKey($segment, $parent);
-        $modifiedCacheKey = $this->buildModifiedCacheKey($segment, $parent);
-
-        $contents = Cache::remember($cacheKey, now()->addMinutes(15), function () use ($segment, $parent) {
-            return NseCommanContent::select([
-                    'id', 'name', 'type', 'segment', 'path',
-                    'parent_folder', 'path',
-                    'nse_created_at', 'nse_modified_at', 'is_downloaded'
-                ])
-                ->where('segment', $segment)
-                ->where('parent_folder', $parent)
-                ->orderBy('type', 'DESC')
-                ->orderBy('nse_modified_at', 'DESC')
-                ->get();
-        });
-
-        $contents = Cache::remember($modifiedCacheKey, now()->addMinutes(15), function () use ($contents, $segment) {
-            return $this->computeFolderModifiedTimes($contents, $segment);
-        });
-
-        $html = view('admin.nse.common._folder_table_rows', [
-            'contents' => $contents,
-            'segment'  => $segment,
-            'folder'   => $folder,
-        ])->render();
-
-        return response()->json([
-            'status'     => 'ok',
-            'html'       => $html,
-            'count'      => $contents->count(),
-            'lastSynced' => Carbon::now()->timezone('Asia/Kolkata')->format('h:i a'),
-        ]);
-    }
-
-    /*
-    |--------------------------------------------------------------------------
     | Sync Common Segment — Dispatches Job
     |--------------------------------------------------------------------------
     */
-    public function syncMemberSegment($segment, $folder)
+    public function syncCommonSegment($segment, $folder)
     {
         // ✅ updateOrCreate — cleaner than first()+touch()/create()
         SyncJob::updateOrCreate(
