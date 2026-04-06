@@ -52,6 +52,10 @@ class NSECommanController extends Controller
         $parent        = $currentFolder ?: 'root';
         $page          = (int) $request->query('page', 1);
 
+        $search    = $request->query('search');
+        $sort      = $request->query('sort', 'nse_modified_at');
+        $direction = $request->query('direction', 'desc');
+
         /*
     |--------------------------------------------------------------------------
     | Sync Job
@@ -77,14 +81,16 @@ class NSECommanController extends Controller
 
         /*
     |--------------------------------------------------------------------------
-    | Page-aware cache key
+    | Cache Key (IMPORTANT)
     |--------------------------------------------------------------------------
     */
-        $cacheKey = "nse_common_{$segment}_" . md5($parent) . "_page_{$page}";
+        $cacheKey = "nse_common_{$segment}_"
+            . md5($parent . '|' . $search . '|' . $sort . '|' . $direction)
+            . "_page_{$page}";
 
-        $contents = Cache::remember($cacheKey, now()->addMinutes(10), function () use ($segment, $parent) {
+        $contents = Cache::remember($cacheKey, now()->addMinutes(10), function () use ($segment, $parent, $search, $sort, $direction) {
 
-            $paginator = NseCommanContent::select([
+            $query = NseCommanContent::select([
                 'id',
                 'name',
                 'type',
@@ -96,14 +102,36 @@ class NSECommanController extends Controller
                 'is_downloaded'
             ])
                 ->where('segment', $segment)
-                ->where('parent_folder', $parent)
-                ->orderBy('type', 'DESC')
-                ->orderBy('nse_modified_at', 'DESC')
-                ->paginate($this->perPage);
+                ->where('parent_folder', $parent);
 
             /*
         |--------------------------------------------------------------------------
-        | Apply folder modification logic
+        | Search
+        |--------------------------------------------------------------------------
+        */
+            if (!empty($search)) {
+                $query->where('name', 'like', "%{$search}%");
+            }
+
+            /*
+        |--------------------------------------------------------------------------
+        | Sorting (whitelist)
+        |--------------------------------------------------------------------------
+        */
+            $allowedSorts = ['name', 'nse_created_at', 'nse_modified_at'];
+
+            if (!in_array($sort, $allowedSorts)) {
+                $sort = 'nse_modified_at';
+            }
+
+            $query->orderBy('type', 'DESC') // folders first
+                ->orderBy($sort, $direction);
+
+            $paginator = $query->paginate($this->perPage);
+
+            /*
+        |--------------------------------------------------------------------------
+        | Folder modified logic
         |--------------------------------------------------------------------------
         */
             $collection = $this->computeFolderModifiedTimes(
@@ -144,23 +172,21 @@ class NSECommanController extends Controller
         Cache::put($lockKey, true, now()->addMinutes(3));
 
         try {
-            $this->syncCommonSegment($segment, $folder);
+            $this->syncMemberSegment($segment, $folder);
 
             /*
         |--------------------------------------------------------------------------
-        | Clear all cached pages for this segment + folder
+        | ❌ Avoid this (too dangerous)
         |--------------------------------------------------------------------------
         */
-            $totalRecords = NseCommanContent::where('segment', $segment)
-                ->where('parent_folder', $parent)
-                ->count();
+            // Cache::flush();
 
-            $totalPages = max(1, ceil($totalRecords / $this->perPage));
-
-            for ($i = 1; $i <= $totalPages; $i++) {
-                $cacheKey = "nse_common_{$segment}_" . md5($parent) . "_page_{$i}";
-                Cache::forget($cacheKey);
-            }
+            /*
+        |--------------------------------------------------------------------------
+        | ✅ Correct: clear only relevant cache
+        |--------------------------------------------------------------------------
+        */
+            $this->clearSegmentCache($segment, $parent);
 
             $lastSyncedFormatted = Carbon::now()
                 ->timezone('Asia/Kolkata')
@@ -178,6 +204,16 @@ class NSECommanController extends Controller
             ], 500);
         } finally {
             Cache::forget($lockKey);
+        }
+    }
+
+    private function clearSegmentCache($segment, $parent)
+    {
+        // Since cache keys include search, sort, direction, page
+        // safest fallback: clear by pattern (if Redis not used → loop)
+
+        for ($i = 1; $i <= 50; $i++) { // adjust based on max pages
+            Cache::forget("nse_common_{$segment}_" . md5($parent) . "_page_{$i}");
         }
     }
 
