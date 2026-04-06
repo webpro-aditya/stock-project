@@ -248,7 +248,7 @@ $folder = trim($folder ?? '', '/');
                     } else if (data.status === 'in_progress') {
                         badge.innerText = "Already syncing...";
                     } else {
-                        badge.innerText = "Error";
+                        // badge.innerText = "Error";
                     }
 
                     setTimeout(() => {
