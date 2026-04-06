@@ -50,7 +50,7 @@ $folder = trim($folder ?? '', '/');
     }
 
     td:nth-child(2) {
-        width: 40% !important;
+        width: 32% !important;
     }
 </style>
 @endsection
