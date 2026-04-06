@@ -7,7 +7,7 @@ use App\Http\Controllers\Admin\BSEController;
 use App\Http\Controllers\Admin\NSEController;
 use App\Http\Controllers\Admin\NSELogController;
 use App\Http\Controllers\Admin\NSECommanController;
-use App\Http\Controllers\Admin\NSEDownloadController;
+// use App\Http\Controllers\Admin\NSEDownloadController;
 
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Route;
@@ -74,8 +74,8 @@ Route::group(['middleware' => 'auth'], function () {
 
 
         //NSE AutoDownloader
-        Route::get('/nse/auto-download/', [NSEDownloadController::class, 'index'])->name('nse.downloads.index');
-        Route::post('/nse/auto-download/save', [NSEDownloadController::class, 'store'])->name('nse.downloads.save');
+        // Route::get('/nse/auto-download/', [NSEDownloadController::class, 'index'])->name('nse.downloads.index');
+        // Route::post('/nse/auto-download/save', [NSEDownloadController::class, 'store'])->name('nse.downloads.save');
 
         // Background sync — called by AJAX on page load
         Route::post('/nse/{segment}/sync-bg', [NseController::class, 'syncBackground'])
