@@ -23,15 +23,14 @@
             class="row-selector w-4 h-4 custom-checkbox rounded border-gray-300">
         @endif
     </td>
-    <td class="px-6 py-4 text-gray-700 font-medium" style="display:none;">
-        {{ $item->type }}
-    </td>
-    <td scope="row" class="px-6 py-4 font-medium text-gray-900 flex items-center gap-3 folder_col">
-        <div class="w-8 h-8 flex items-center justify-center bg-indigo-100 rounded-lg">
-            <i data-lucide="{{ $isFolder ? 'folder' : 'file' }}"
-                class="w-5 h-5 {{ $isFolder ? 'text-yellow-500 fill-yellow-500/20' : 'text-indigo-600' }}"></i>
+    <td scope="row" class="px-6 py-4 font-medium text-gray-900 folder_col">
+        <div class="flex items-center gap-3">
+            <div class="w-8 h-8 flex items-center justify-center bg-indigo-100 rounded-lg">
+                <i data-lucide="{{ $isFolder ? 'folder' : 'file' }}"
+                    class="w-5 h-5 {{ $isFolder ? 'text-yellow-500 fill-yellow-500/20' : 'text-indigo-600' }}"></i>
+            </div>
+            <span class="break-all">{{ $item->name }}</span>
         </div>
-        <span class="break-all">{{ $item->name }}</span>
     </td>
     <td class="px-6 py-4 text-gray-700 font-medium CreatedDate">
         {{ $item->nse_created_at ? $item->nse_created_at->setTimezone('Asia/Kolkata')->format('Y-m-d h:i a') : '' }}

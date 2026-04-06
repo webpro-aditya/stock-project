@@ -15,6 +15,7 @@ $folder = trim($folder ?? '', '/');
     }
 
     @keyframes badge-bounce {
+
         0%,
         80%,
         100% {
@@ -42,6 +43,14 @@ $folder = trim($folder ?? '', '/');
         color: #333;
         padding: 4px 8px;
         border-radius: 4px;
+    }
+
+    tbody tr:nth-child(even) {
+        background: #F7F7F7 !important;
+    }
+
+    td:nth-child(2) {
+        width: 40% !important;
     }
 </style>
 @endsection
@@ -153,29 +162,53 @@ $folder = trim($folder ?? '', '/');
         <div class="overflow-x-auto">
             <table class="w-full text-sm">
                 <thead class="bg-gray-100 text-xs font-semibold uppercase tracking-wider text-gray-500">
-    <tr>
-        <th class="px-4 py-3 w-10">
-            <input type="checkbox" onchange="toggleAll(this)" class="w-4 h-4 rounded border-gray-300">
-        </th>
-        <th class="px-6 py-3 text-left">
-            <a href="{{ request()->fullUrlWithQuery(['sort' => 'name', 'direction' => request('direction') === 'asc' ? 'desc' : 'asc']) }}">
-                Folder / File Name
-                @if(request('sort') == 'name') {{ request('direction') == 'asc' ? '↑' : '↓' }} @endif
-            </a>
-        </th>
-        <th class="px-6 py-3 text-left">
-            <a href="{{ request()->fullUrlWithQuery(['sort' => 'nse_created_at', 'direction' => request('direction') === 'asc' ? 'desc' : 'asc']) }}">
-                Created
-            </a>
-        </th>
-        <th class="px-6 py-3 text-left">
-            <a href="{{ request()->fullUrlWithQuery(['sort' => 'nse_modified_at', 'direction' => request('direction') === 'asc' ? 'desc' : 'asc']) }}">
-                Last Updated
-            </a>
-        </th>
-        <th class="px-6 py-3 text-center">Action</th>
-    </tr>
-</thead>
+                    <tr>
+                        <th class="px-4 py-3 w-10">
+                            <input type="checkbox" onchange="toggleAll(this)" class="w-4 h-4 rounded border-gray-300">
+                        </th>
+
+                        <th class="px-6 py-3 text-left">
+                            <a href="{{ request()->fullUrlWithQuery(['sort' => 'name', 'direction' => request('direction') === 'asc' ? 'desc' : 'asc']) }}"
+                                class="inline-flex items-center gap-1.5 hover:text-gray-800 transition-colors">
+                                Folder / File Name
+                                @if(request('sort') == 'name')
+                                <i data-lucide="{{ request('direction') == 'asc' ? 'arrow-up' : 'arrow-down' }}"
+                                    class="w-3.5 h-3.5 text-brand"></i>
+                                @else
+                                <i data-lucide="arrow-up-down" class="w-3.5 h-3.5 text-gray-300"></i>
+                                @endif
+                            </a>
+                        </th>
+
+                        <th class="px-6 py-3 text-left">
+                            <a href="{{ request()->fullUrlWithQuery(['sort' => 'nse_created_at', 'direction' => request('direction') === 'asc' ? 'desc' : 'asc']) }}"
+                                class="inline-flex items-center gap-1.5 hover:text-gray-800 transition-colors">
+                                Created
+                                @if(request('sort') == 'nse_created_at')
+                                <i data-lucide="{{ request('direction') == 'asc' ? 'arrow-up' : 'arrow-down' }}"
+                                    class="w-3.5 h-3.5 text-brand"></i>
+                                @else
+                                <i data-lucide="arrow-up-down" class="w-3.5 h-3.5 text-gray-300"></i>
+                                @endif
+                            </a>
+                        </th>
+
+                        <th class="px-6 py-3 text-left">
+                            <a href="{{ request()->fullUrlWithQuery(['sort' => 'nse_modified_at', 'direction' => request('direction') === 'asc' ? 'desc' : 'asc']) }}"
+                                class="inline-flex items-center gap-1.5 hover:text-gray-800 transition-colors">
+                                Last Updated
+                                @if(request('sort') == 'nse_modified_at')
+                                <i data-lucide="{{ request('direction') == 'asc' ? 'arrow-up' : 'arrow-down' }}"
+                                    class="w-3.5 h-3.5 text-brand"></i>
+                                @else
+                                <i data-lucide="arrow-up-down" class="w-3.5 h-3.5 text-gray-300"></i>
+                                @endif
+                            </a>
+                        </th>
+
+                        <th class="px-6 py-3 text-center">Action</th>
+                    </tr>
+                </thead>
 
                 <tbody>
                     @include('admin.nse.common._folder_table_rows', [
