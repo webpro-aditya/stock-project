@@ -144,6 +144,7 @@ class NSECommanController extends Controller
             return $paginator;
         });
 
+
         return view('admin.nse.common.segment_folder_today', [
             'segment'    => $segment,
             'folder'     => $currentFolder,
@@ -222,7 +223,7 @@ class NSECommanController extends Controller
     | Sync Common Segment — Dispatches Job
     |--------------------------------------------------------------------------
     */
-    public function syncCommonSegment($segment, $folder)
+    public function syncMemberSegment($segment, $folder)
     {
         // ✅ updateOrCreate — cleaner than first()+touch()/create()
         SyncJob::updateOrCreate(

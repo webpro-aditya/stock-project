@@ -180,7 +180,7 @@ $folder = trim($folder ?? '', '/');
                             </a>
                         </th>
 
-                        <th class="px-6 py-3 text-right">Action</th>
+                        <th class="px-6 py-3 text-center">Action</th>
                     </tr>
                 </thead>
 
