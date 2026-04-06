@@ -101,19 +101,19 @@ $folder = trim($folder ?? '', '/');
             </li>
 
             @php
-                $rawFolderParam  = request()->query('folder');
-                $folderParts     = array_filter(explode('/', $rawFolderParam));
-                $accumulatedPath = '';
+            $rawFolderParam = request()->query('folder');
+            $folderParts = array_filter(explode('/', $rawFolderParam));
+            $accumulatedPath = '';
             @endphp
 
             @foreach($folderParts as $part)
-                @php $accumulatedPath .= ($accumulatedPath ? '/' : '') . $part; @endphp
-                <li>/</li>
-                <li>
-                    <a href="{{ route('nse.common.segment.folder.today', ['segment' => $segment, 'folder' => 'root']) }}?folder={{ $accumulatedPath }}">
-                        {{ $part }}
-                    </a>
-                </li>
+            @php $accumulatedPath .= ($accumulatedPath ? '/' : '') . $part; @endphp
+            <li>/</li>
+            <li>
+                <a href="{{ route('nse.common.segment.folder.today', ['segment' => $segment, 'folder' => 'root']) }}?folder={{ $accumulatedPath }}">
+                    {{ $part }}
+                </a>
+            </li>
             @endforeach
         </ol>
     </nav>
@@ -130,17 +130,17 @@ $folder = trim($folder ?? '', '/');
             <input type="hidden" name="folder" value="{{ request('folder') }}">
 
             <input type="text"
-                   name="search"
-                   value="{{ request('search') }}"
-                   placeholder="Search..."
-                   class="border px-3 py-2 rounded">
+                name="search"
+                value="{{ request('search') }}"
+                placeholder="Search..."
+                class="border px-3 py-2 rounded">
 
             <button class="bg-brand text-white px-4 py-2 rounded">
                 Search
             </button>
 
             @if(request('search'))
-                <a href="{{ request()->url() }}?folder={{ request('folder') }}">Clear</a>
+            <a href="{{ request()->url() }}?folder={{ request('folder') }}">Clear</a>
             @endif
         </form>
 
@@ -157,7 +157,7 @@ $folder = trim($folder ?? '', '/');
                             ]) }}">
                                 Name
                                 @if(request('sort') == 'name')
-                                    {{ request('direction') == 'asc' ? '↑' : '↓' }}
+                                {{ request('direction') == 'asc' ? '↑' : '↓' }}
                                 @endif
                             </a>
                         </th>
@@ -186,9 +186,9 @@ $folder = trim($folder ?? '', '/');
 
                 <tbody>
                     @include('admin.nse.common._folder_table_rows', [
-                        'contents' => $contents,
-                        'segment'  => $segment,
-                        'folder'   => $folder,
+                    'contents' => $contents,
+                    'segment' => $segment,
+                    'folder' => $folder,
                     ])
                 </tbody>
             </table>
@@ -204,8 +204,11 @@ $folder = trim($folder ?? '', '/');
 @section('script')
 <script>
     const Toast = Swal.mixin({
-        toast: true, position: 'top-end', showConfirmButton: false,
-        timer: 3000, timerProgressBar: true,
+        toast: true,
+        position: 'top-end',
+        showConfirmButton: false,
+        timer: 3000,
+        timerProgressBar: true,
         didOpen: (toast) => {
             toast.addEventListener('mouseenter', Swal.stopTimer);
             toast.addEventListener('mouseleave', Swal.resumeTimer);
@@ -231,20 +234,18 @@ $folder = trim($folder ?? '', '/');
             .then(res => res.json())
             .then(data => {
 
-                // Optional: show small UI feedback only
-                const badge = document.getElementById('syncStatusBadge');
-                if (badge) {
-                    badge.innerText = "Updated";
-                    badge.style.display = 'inline';
-                    setTimeout(() => badge.style.display = 'none', 3000);
+                if (data.status === 'ok') {
+                    // 🔥 reload to fetch fresh DB data
+                    window.location.reload();
                 }
+
             })
             .catch(err => {
                 console.error("Sync error:", err);
             });
     }
 
-     function triggerDownload(btn, id) {
+    function triggerDownload(btn, id) {
         const originalContent = btn.innerHTML;
         btn.disabled = true;
         btn.innerHTML = `<i data-lucide="loader-circle" class="w-4 h-4 animate-spin mr-2"></i>`;
@@ -252,31 +253,50 @@ $folder = trim($folder ?? '', '/');
 
         const url = "{{ route('nse.common.file.prepare', ['id' => ':id']) }}".replace(':id', id);
 
-        fetch(url, { method: 'GET', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
-        .then(response => { if (!response.ok) throw new Error(); return response.json(); })
-        .then(data => {
-            if (data.success) {
-                Toast.fire({ icon: 'success', title: 'Downloading...' });
-                btn.innerHTML = `<i data-lucide="check-circle" class="w-5 h-5 text-success"></i>&nbsp;Downloaded`;
+        fetch(url, {
+                method: 'GET',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(response => {
+                if (!response.ok) throw new Error();
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    Toast.fire({
+                        icon: 'success',
+                        title: 'Downloading...'
+                    });
+                    btn.innerHTML = `<i data-lucide="check-circle" class="w-5 h-5 text-success"></i>&nbsp;Downloaded`;
+                    lucide.createIcons();
+                    window.location.href = data.url;
+                } else throw new Error();
+            })
+            .catch(() => {
+                Toast.fire({
+                    icon: 'error',
+                    title: 'Download Failed.',
+                    text: 'Please retry after some time.',
+                    timer: 5000
+                });
+                btn.innerHTML = `<i data-lucide="x" class="w-4 h-4 mr-2"></i>`;
                 lucide.createIcons();
-                window.location.href = data.url;
-            } else throw new Error();
-        })
-        .catch(() => {
-            Toast.fire({ icon: 'error', title: 'Download Failed.', text: 'Please retry after some time.', timer: 5000 });
-            btn.innerHTML = `<i data-lucide="x" class="w-4 h-4 mr-2"></i>`;
-            lucide.createIcons();
-            setTimeout(() => { btn.disabled = false; btn.innerHTML = originalContent; }, 3000);
-        });
+                setTimeout(() => {
+                    btn.disabled = false;
+                    btn.innerHTML = originalContent;
+                }, 3000);
+            });
     }
 
     function checkSelection() {
         const count = document.querySelectorAll('.row-selector:checked').length;
-        const bar   = document.getElementById('bulkActionBar');
+        const bar = document.getElementById('bulkActionBar');
         document.getElementById('selectedCount').innerText = count;
-        count > 0
-            ? bar.classList.remove('translate-y-[150%]', 'opacity-0')
-            : bar.classList.add('translate-y-[150%]', 'opacity-0');
+        count > 0 ?
+            bar.classList.remove('translate-y-[150%]', 'opacity-0') :
+            bar.classList.add('translate-y-[150%]', 'opacity-0');
     }
 
     function toggleAll(masterCheckbox) {
@@ -293,7 +313,13 @@ $folder = trim($folder ?? '', '/');
         const selectedCheckboxes = document.querySelectorAll('.row-selector:checked');
         const selectedIds = Array.from(selectedCheckboxes).map(cb => cb.value);
 
-        if (!selectedIds.length) { Toast.fire({ icon: 'warning', title: 'No files selected' }); return; }
+        if (!selectedIds.length) {
+            Toast.fire({
+                icon: 'warning',
+                title: 'No files selected'
+            });
+            return;
+        }
 
         const btn = document.querySelector('.btn-bulk-action');
         const originalHtml = btn.innerHTML;
@@ -302,36 +328,47 @@ $folder = trim($folder ?? '', '/');
         lucide.createIcons();
 
         fetch("{{ route('nse.common.download.bulk.prepare') }}", {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
-            },
-            body: JSON.stringify({ ids: selectedIds })
-        })
-        .then(response => {
-            if (!response.ok) return response.json().then(err => { throw new Error(err.message); });
-            return response.json();
-        })
-        .then(data => {
-            if (data.success) {
-                window.location.href = data.url;
-                Toast.fire({ icon: 'success', title: 'Download started!' });
-                setTimeout(() => {
-                    btn.disabled = false;
-                    btn.innerHTML = originalHtml;
-                    lucide.createIcons();
-                    clearSelection();
-                }, 2000);
-            } else throw new Error();
-        })
-        .catch(() => {
-            Toast.fire({ icon: 'error', title: 'Download Failed', text: 'Please retry after some time.', timer: 5000 });
-            btn.disabled = false;
-            btn.innerHTML = originalHtml;
-            lucide.createIcons();
-        });
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+                },
+                body: JSON.stringify({
+                    ids: selectedIds
+                })
+            })
+            .then(response => {
+                if (!response.ok) return response.json().then(err => {
+                    throw new Error(err.message);
+                });
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    window.location.href = data.url;
+                    Toast.fire({
+                        icon: 'success',
+                        title: 'Download started!'
+                    });
+                    setTimeout(() => {
+                        btn.disabled = false;
+                        btn.innerHTML = originalHtml;
+                        lucide.createIcons();
+                        clearSelection();
+                    }, 2000);
+                } else throw new Error();
+            })
+            .catch(() => {
+                Toast.fire({
+                    icon: 'error',
+                    title: 'Download Failed',
+                    text: 'Please retry after some time.',
+                    timer: 5000
+                });
+                btn.disabled = false;
+                btn.innerHTML = originalHtml;
+                lucide.createIcons();
+            });
     }
-
 </script>
 @endsection
