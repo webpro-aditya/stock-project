@@ -15,7 +15,6 @@ $folder = trim($folder ?? '', '/');
     }
 
     @keyframes badge-bounce {
-
         0%,
         80%,
         100% {
@@ -36,6 +35,13 @@ $folder = trim($folder ?? '', '/');
     #syncStatusBadge,
     #syncDoneBadge {
         transition: opacity 0.25s ease;
+    }
+
+    #syncStatusBadge {
+        background: #eee;
+        color: #333;
+        padding: 4px 8px;
+        border-radius: 4px;
     }
 </style>
 @endsection

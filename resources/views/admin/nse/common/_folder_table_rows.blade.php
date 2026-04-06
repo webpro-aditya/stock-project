@@ -70,16 +70,19 @@
 </tr>
 
 @empty
-<tr id="bg-white border-b border-gray-200 hover:bg-gray-50">
-    <td class="p-4 py-4 text-gray-700 font-medium"></td>
-    <td class="px-6 py-4 text-gray-700 font-medium"></td>
-    <td class="px-6 py-4 text-gray-700 font-medium">
-        <i data-lucide="cloud-off" class="w-12 h-12 mx-auto text-gray-300"></i>
-        <p class="mt-4 text-lg font-semibold text-gray-600">No activity found.</p>
-        <p class="text-sm">Sync to fetch the latest files.</p>
+<tr class="bg-white border-b border-gray-200">
+    <td colspan="6" class="px-6 py-16 text-center">
+        <div class="flex flex-col items-center justify-center">
+            <div class="p-4 bg-gray-50 rounded-full">
+                <i data-lucide="cloud-off" class="w-12 h-12 text-gray-300"></i>
+            </div>
+            
+            <h3 class="mt-4 text-lg font-semibold text-gray-700">No activity found</h3>
+            
+            <p class="text-sm text-gray-500 max-w-xs mx-auto">
+                We couldn't find any records here. Try clicking <span class="font-bold text-brand">Sync Now</span> to fetch the latest files.
+            </p>
+        </div>
     </td>
-    <td class="px-6 py-4 text-gray-700 font-medium"></td>
-    <td class="px-6 py-4 text-gray-700 font-medium"></td>
-    <td class="px-6 py-4 text-gray-700 font-medium"></td>
 </tr>
 @endforelse
