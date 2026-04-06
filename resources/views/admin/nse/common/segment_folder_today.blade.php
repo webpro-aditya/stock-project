@@ -244,11 +244,11 @@ $folder = trim($folder ?? '', '/');
                 if (badge) {
                     if (data.status === 'ok') {
                         badge.innerText = "Updated";
-                        window.reload();
+                        window.location.reload();
                     } else if (data.status === 'in_progress') {
                         badge.innerText = "Already syncing...";
                     } else {
-                        // badge.innerText = "Error";
+                        badge.innerText = "Error";
                     }
 
                     setTimeout(() => {
