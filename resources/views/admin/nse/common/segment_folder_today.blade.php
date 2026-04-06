@@ -216,20 +216,13 @@ $folder = trim($folder ?? '', '/');
     });
 
     document.addEventListener('DOMContentLoaded', function() {
-
-        // ✅ prevent infinite loop
-        if (sessionStorage.getItem('sync_done') === '1') {
-            sessionStorage.removeItem('sync_done'); // reset for next manual visit
-            return;
-        }
-
         triggerBackgroundSync();
     });
-
 
     function triggerBackgroundSync() {
         const badge = document.getElementById('syncStatusBadge');
 
+        // ✅ Show syncing state immediately
         if (badge) {
             badge.innerText = "Syncing...";
             badge.style.display = 'inline';
@@ -250,16 +243,7 @@ $folder = trim($folder ?? '', '/');
 
                 if (badge) {
                     if (data.status === 'ok') {
-
-                        badge.innerText = "Updated";
-
-                        // ✅ mark before reload
-                        sessionStorage.setItem('sync_done', '1');
-
-                        setTimeout(() => {
-                            window.location.reload();
-                        }, 500);
-
+                        badge.innerText = "Updated. Please refresh to see changes.";
                     } else if (data.status === 'in_progress') {
                         badge.innerText = "Already syncing...";
                     } else {
