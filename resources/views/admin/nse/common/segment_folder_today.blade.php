@@ -136,7 +136,10 @@ $folder = trim($folder ?? '', '/');
     <div class="bg-white rounded-lg shadow-lg">
 
         <div class="px-6 py-3 border-b flex justify-between">
-            <div class="font-bold">All Activity</div>
+            <div class="flex items-center gap-3 text-lg font-bold text-gray-900">
+                <i data-lucide="sun" class="w-6 h-6 text-amber-500"></i>
+                All Activity
+            </div>
             <div id="syncStatusBadge" style="display:none;">Syncing...</div>
         </div>
 
