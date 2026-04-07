@@ -117,8 +117,10 @@ class NSECommanController extends Controller
             $sort = 'nse_modified_at';
         }
 
-        $query->orderBy('type', 'DESC')
-            ->orderBy($sort, $direction);
+        $query->orderBy('type', 'DESC');
+        if (!empty($sort)) {
+            $query->orderBy($sort, $direction);
+        }
 
         $contents = $query->paginate($this->perPage);
 
@@ -161,9 +163,20 @@ class NSECommanController extends Controller
 
             \Log::info("Sync STARTED: {$segment} | {$parent}");
 
-            $this->syncMemberSegment($segment, $folder);
+            $result = $this->syncMemberSegment($segment, $folder);
 
-            \Log::info("Sync COMPLETED: {$segment} | {$parent}");
+            $created = $result['created'] ?? 0;
+            $updated = $result['updated'] ?? 0;
+            $deleted = $result['deleted'] ?? 0;
+
+            $hasChanges = ($created + $deleted) > 0;
+
+            \Log::info("Sync COMPLETED", [
+                'segment' => $segment,
+                'created' => $created,
+                'updated' => $updated,
+                'deleted' => $deleted
+            ]);
 
             $lastSyncedFormatted = now()
                 ->timezone('Asia/Kolkata')
@@ -171,6 +184,13 @@ class NSECommanController extends Controller
 
             return response()->json([
                 'status'     => 'ok',
+                'created'    => $created,
+                'updated'    => $updated,
+                'deleted'    => $deleted,
+                'hasChanges' => $hasChanges,
+                'message'    => $hasChanges
+                    ? "Updated ({$created} new, {$updated} modified, {$deleted} removed)"
+                    : "Already up to date",
                 'lastSynced' => $lastSyncedFormatted,
             ]);
         } catch (\Throwable $e) {
@@ -191,14 +211,16 @@ class NSECommanController extends Controller
 |--------------------------------------------------------------------------
 */
     public function syncMemberSegment($segment, $folder)
-    {
-        SyncJob::updateOrCreate(
-            ['type' => 'common', 'segment' => $segment],
-            ['updated_at' => Carbon::now()]
-        );
+{
+    SyncJob::updateOrCreate(
+        ['type' => 'common', 'segment' => $segment],
+        ['updated_at' => Carbon::now()]
+    );
 
-        SyncNseCommaonFolders::dispatch($segment, $folder);
-    }
+    $job = new SyncNseCommaonFolders($segment, $folder);
+
+    return app()->call([$job, 'handle']);
+}
 
     /*
     |--------------------------------------------------------------------------

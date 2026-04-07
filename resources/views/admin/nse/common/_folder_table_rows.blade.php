@@ -79,7 +79,7 @@
             <h3 class="mt-4 text-lg font-semibold text-gray-700">No activity found</h3>
             
             <p class="text-sm text-gray-500 max-w-xs mx-auto">
-                We couldn't find any records here. Try clicking <span class="font-bold text-brand">Sync Now</span> to fetch the latest files.
+                We couldn't find any records here.
             </p>
         </div>
     </td>

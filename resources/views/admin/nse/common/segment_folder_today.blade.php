@@ -249,12 +249,11 @@ $folder = trim($folder ?? '', '/');
     });
 
     function triggerBackgroundSync() {
-        const badge = document.getElementById('syncStatusBadge');
 
-        // ✅ Show syncing state immediately
-        if (badge) {
-            badge.innerText = "Syncing...";
-            badge.style.display = 'inline';
+        // ✅ prevent multiple reload loops
+        if (sessionStorage.getItem('sync_reloaded') === '1') {
+            sessionStorage.removeItem('sync_reloaded');
+            return;
         }
 
         fetch("{{ route('nse.common.sync.background', ['segment' => $segment]) }}", {
@@ -270,30 +269,27 @@ $folder = trim($folder ?? '', '/');
             .then(res => res.json())
             .then(data => {
 
-                if (badge) {
-                    if (data.status === 'ok') {
-                        badge.innerText = "Updated. Please refresh to see changes.";
-                    } else if (data.status === 'in_progress') {
-                        badge.innerText = "Already syncing...";
-                    } else {
-                        badge.innerText = "Error";
+                // ✅ reload ONLY once when changes exist
+                if (data.status === 'ok' && data.hasChanges) {
+
+                    const badge = document.getElementById('syncStatusBadge');
+
+                    if (badge) {
+                        badge.innerText = "Updating...";
+                        badge.style.display = 'inline';
                     }
 
+                    // ✅ mark before reload
+                    sessionStorage.setItem('sync_reloaded', '1');
+
                     setTimeout(() => {
-                        badge.style.display = 'none';
-                    }, 3000);
+                        window.location.reload();
+                    }, 500);
                 }
 
             })
             .catch(err => {
                 console.error("Sync error:", err);
-
-                if (badge) {
-                    badge.innerText = "Error";
-                    setTimeout(() => {
-                        badge.style.display = 'none';
-                    }, 3000);
-                }
             });
     }
 
@@ -359,6 +355,83 @@ $folder = trim($folder ?? '', '/');
     function clearSelection() {
         document.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = false);
         checkSelection();
+    }
+
+    function syncNow(segment, folder) {
+
+        const btn = document.querySelector('.btn-sync');
+        const originalHtml = btn.innerHTML;
+
+        btn.disabled = true;
+        btn.innerHTML = '<i data-lucide="loader-circle" class="w-4 h-4 animate-spin"></i> SYNCING...';
+        lucide.createIcons();
+
+        fetch("{{ route('nse.common.sync.background', ['segment' => ':seg']) }}".replace(':seg', segment), {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+                },
+                body: JSON.stringify({
+                    folder: folder
+                })
+            })
+            .then(res => res.json())
+            .then(data => {
+
+                btn.disabled = false;
+                btn.innerHTML = originalHtml;
+                lucide.createIcons();
+
+                if (data.status === 'ok') {
+
+                    // ✅ ONLY reload if changes exist
+                    if (data.hasChanges) {
+
+                        Toast.fire({
+                            icon: 'success',
+                            title: data.message || 'Changes detected. Updating...'
+                        });
+
+                        // ✅ prevent reload loop
+                        sessionStorage.setItem('sync_reloaded', '1');
+
+                        setTimeout(() => {
+                            window.location.reload();
+                        }, 600);
+
+                    } else {
+                        // ✅ no UI noise (as per your requirement)
+                        // do nothing
+                    }
+
+                } else if (data.status === 'in_progress') {
+
+                    Toast.fire({
+                        icon: 'info',
+                        title: 'Sync already in progress.'
+                    });
+
+                } else {
+
+                    Toast.fire({
+                        icon: 'error',
+                        title: 'Sync failed. Please retry.'
+                    });
+                }
+
+            })
+            .catch(() => {
+
+                btn.disabled = false;
+                btn.innerHTML = originalHtml;
+                lucide.createIcons();
+
+                Toast.fire({
+                    icon: 'error',
+                    title: 'Something went wrong.'
+                });
+            });
     }
 
     function downloadSelected() {

@@ -12,7 +12,6 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Str;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -20,7 +19,7 @@ class SyncNseCommaonFolders implements ShouldQueue, ShouldBeUnique
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public $timeout = 2800; // 30 minutes
+    public $timeout = 2800;
     public $tries = 3;
     public $uniqueFor = 10;
 
@@ -29,8 +28,8 @@ class SyncNseCommaonFolders implements ShouldQueue, ShouldBeUnique
 
     public function __construct(string $segment, string $folder = '')
     {
-        $this->segment   = Str::upper($segment);
-        $this->folder = $this->normalizePath($folder);
+        $this->segment = Str::upper($segment);
+        $this->folder  = $this->normalizePath($folder);
     }
 
     public function uniqueId()
@@ -38,48 +37,67 @@ class SyncNseCommaonFolders implements ShouldQueue, ShouldBeUnique
         return $this->segment;
     }
 
+    /*
+    |--------------------------------------------------------------------------
+    | MAIN HANDLE (WITH CHANGE TRACKING)
+    |--------------------------------------------------------------------------
+    */
     public function handle(NSECommanService $NSECommanService)
     {
+        $created = 0;
+        $updated = 0;
+        $deleted = 0;
+
         $authToken = $NSECommanService->getAuthToken();
 
         if (!$authToken) {
-            Log::channel('syncron')->info("Starting NSE Member sync -- Login token Gen. Failed", [
-                'segment' => $this->segment,
-                'root' => $this->folder ?: '(root)'
+            Log::channel('syncron')->info("Token failed", [
+                'segment' => $this->segment
             ]);
-            saveSyncLog('member', $this->segment, '401', '803', 'Starting NSE Member sync -- Login token Gen. Failed. Folder: ' . $this->folder ?: '(root)');
-            return false;
+            return ['created' => 0, 'updated' => 0, 'deleted' => 0];
         }
 
-        Log::channel('syncron')->info("Starting NSE Member sync", [
+        Log::channel('syncron')->info("Sync started", [
             'segment' => $this->segment,
-            'root' => $this->folder ?: '(root)'
+            'folder'  => $this->folder ?: '(root)'
         ]);
-        saveSyncLog('member', $this->segment, '200', '', 'Starting NSE Member sync for folder ' . $this->folder ?: '(root)');
 
-        $this->syncSingleFolder(
+        $result = $this->syncSingleFolder(
             $NSECommanService,
             $authToken,
             $this->segment,
             $this->folder
         );
 
-        Log::channel('syncron')->info("NSE sync completed", [
-            'segment' => $this->segment
+        \Log::info("COUNT in JOB", [
+            'created' => $result['created'],
+            'updated' => $result['updated'],
+            'deleted' => $result['deleted']
         ]);
 
-        saveSyncLog('member', $this->segment, '200', '', 'NSE sync completed');
+        $created += $result['created'];
+        $updated += $result['updated'];
+        $deleted += $result['deleted'];
+
+        Log::channel('syncron')->info("Sync completed", [
+            'segment' => $this->segment,
+            'created' => $created,
+            'updated' => $updated,
+            'deleted' => $deleted
+        ]);
+
+        return [
+            'created' => $created,
+            'updated' => $updated,
+            'deleted' => $deleted
+        ];
     }
 
-    /**
-     * Normalize folder paths.
-     */
     private function normalizePath(?string $path): string
     {
         if (!$path || strtolower($path) === 'root') {
             return '';
         }
-
         return trim($path, '/');
     }
 
@@ -87,30 +105,29 @@ class SyncNseCommaonFolders implements ShouldQueue, ShouldBeUnique
     {
         $value = preg_replace('/[\x00-\x1F\x7F\xA0]/u', '', $value);
         $value = preg_replace('/\s+/', ' ', $value);
-
         return trim($value);
     }
 
-
+    /*
+    |--------------------------------------------------------------------------
+    | SYNC LOGIC (WITH COUNTERS)
+    |--------------------------------------------------------------------------
+    */
     private function syncSingleFolder(
         NSECommanService $NSECommanService,
         string $authToken,
         string $segment,
         string $currentPath = ''
-    ): void {
+    ): array {
 
         DB::connection()->disableQueryLog();
 
+        $created = 0;
+        $updated = 0;
+        $deleted = 0;
+
         $currentPath = $this->normalizePath($currentPath);
-        $today = now()->toDateString();
         $parent = $currentPath ?: 'root';
-
-        Log::channel('syncron')->info("Fetching folder (single level)", [
-            'segment' => $segment,
-            'folderPath' => $parent
-        ]);
-
-        saveSyncLog('member', $this->segment, '200', '', 'Fetching folder ' . $parent);
 
         try {
             $apiResponse = $NSECommanService->getFolderFilesList(
@@ -119,33 +136,14 @@ class SyncNseCommaonFolders implements ShouldQueue, ShouldBeUnique
                 $currentPath
             );
         } catch (\Throwable $e) {
-
-            Log::channel('syncron')->error("API error while fetching folder", [
-                'segment' => $segment,
-                'folder'  => $currentPath ?: 'root',
-                'error'   => $e->getMessage()
-            ]);
-
-            saveSyncLog(
-                'member',
-                $this->segment,
-                '500',
-                '',
-                'API error while fetching folder ' . ($currentPath ?: 'root')
-            );
-
-            return;
+            Log::error("API error", ['error' => $e->getMessage()]);
+            return ['created' => 0, 'updated' => 0, 'deleted' => 0];
         }
 
         if (empty($apiResponse['data']) || !is_array($apiResponse['data'])) {
-            return;
+            return ['created' => 0, 'updated' => 0, 'deleted' => 0];
         }
 
-        /*
-    |--------------------------------------------------------------------------
-    | Preload today's snapshot for this folder only
-    |--------------------------------------------------------------------------
-    */
         $existingToday = NseCommanContent::where('segment', $segment)
             ->where('parent_folder', $parent)
             ->get()
@@ -177,6 +175,11 @@ class SyncNseCommaonFolders implements ShouldQueue, ShouldBeUnique
 
             $existing = $existingToday[$name] ?? null;
 
+            /*
+            |--------------------------------------------------------------------------
+            | CREATE
+            |--------------------------------------------------------------------------
+            */
             if (!$existing) {
 
                 NseCommanContent::create([
@@ -191,7 +194,15 @@ class SyncNseCommaonFolders implements ShouldQueue, ShouldBeUnique
                     'created_at' => now(),
                     'updated_at' => now()
                 ]);
-            } else {
+
+                $created++;
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | UPDATE
+            |--------------------------------------------------------------------------
+            */ else {
 
                 if (
                     $apiDate &&
@@ -203,32 +214,43 @@ class SyncNseCommaonFolders implements ShouldQueue, ShouldBeUnique
                         'nse_modified_at' => $apiDate,
                         'updated_at' => now()
                     ]);
+
+                    $updated++;
                 }
             }
         }
 
+        \Log::info("SYNC SINGLE COUNT AFTER LOOP", [
+            'segment' => $segment,
+            'created' => $created,
+            'updated' => $updated,
+            'deleted' => $deleted
+        ]);
+
         /*
         |--------------------------------------------------------------------------
-        | Delete records that no longer exist in API
+        | DELETE
         |--------------------------------------------------------------------------
         */
-
         $dbNames = $existingToday->keys()->toArray();
-
         $toDelete = array_diff($dbNames, $apiNames);
 
         if (!empty($toDelete)) {
+
+            $count = count($toDelete);
 
             NseCommanContent::where('segment', $segment)
                 ->where('parent_folder', $parent)
                 ->whereIn('name', $toDelete)
                 ->delete();
 
-            Log::channel('syncron')->info("Removed deleted NSE files", [
-                'segment' => $segment,
-                'folder' => $parent,
-                'count' => count($toDelete)
-            ]);
+            $deleted += $count;
         }
+
+        return [
+            'created' => $created,
+            'updated' => $updated,
+            'deleted' => $deleted
+        ];
     }
 }
