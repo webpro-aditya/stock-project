@@ -201,9 +201,6 @@ class NSEService
         if (isset($creds['cookie_abck'])) $cookieString .= '; _abck=' . $creds['cookie_abck'];
         if (isset($creds['cookie_bm_sz'])) $cookieString .= '; bm_sz=' . $creds['cookie_bm_sz'];
 
-        $fp   = fopen($savePath, 'wb+');  // ✅ binary mode
-        $curl = curl_init();
-
         $isGz = str_ends_with(strtolower($fileName), '.gz') || str_ends_with(strtolower($fileName), '.zip');
         $headers = [
             'Authorization: Bearer ' . $authToken,
@@ -216,9 +213,8 @@ class NSEService
 
         $curlOpts = [
             CURLOPT_URL            => $url,
-            CURLOPT_FILE           => $fp,
             CURLOPT_MAXREDIRS      => 10,
-            CURLOPT_TIMEOUT        => 0,
+            CURLOPT_TIMEOUT        => 0, // No timeout on large files
             CURLOPT_FOLLOWLOCATION => true,
             CURLOPT_HTTP_VERSION   => CURL_HTTP_VERSION_1_1,
             CURLOPT_CUSTOMREQUEST  => 'GET',
@@ -231,15 +227,42 @@ class NSEService
             $curlOpts[CURLOPT_ENCODING] = ''; // ✅ Enable gzip/br compression over the wire for plain text files
         }
 
-        curl_setopt_array($curl, $curlOpts);
+        $maxRetries = 3;
+        $attempt = 0;
+        $success = false;
+        
+        $err = '';
+        $httpCode = 0;
+        $contentType = '';
 
-        curl_exec($curl);
-        $httpCode    = curl_getinfo($curl, CURLINFO_HTTP_CODE);
-        $contentType = curl_getinfo($curl, CURLINFO_CONTENT_TYPE);
-        $err         = curl_error($curl);
+        while ($attempt < $maxRetries && !$success) {
+            $attempt++;
 
-        curl_close($curl);
-        fclose($fp);  // ✅ closed before any file operations
+            $fp   = fopen($savePath, 'wb+');  // ✅ binary mode
+            $curlOpts[CURLOPT_FILE] = $fp;
+            
+            $curl = curl_init();
+            curl_setopt_array($curl, $curlOpts);
+
+            curl_exec($curl);
+            $httpCode    = curl_getinfo($curl, CURLINFO_HTTP_CODE);
+            $contentType = curl_getinfo($curl, CURLINFO_CONTENT_TYPE);
+            $err         = curl_error($curl);
+
+            curl_close($curl);
+            fclose($fp);  // ✅ closed before any file operations
+
+            // Handle temporary network failures or server errors (5xx, 429 Too Many Requests)
+            if ($err || $httpCode >= 500 || $httpCode === 429) {
+                Log::warning("NSE API Download Attempt $attempt Failed for $fileName: " . ($err ?: "HTTP $httpCode"));
+                if ($attempt < $maxRetries) {
+                    if (file_exists($savePath)) unlink($savePath);
+                    sleep(2 * $attempt); // Exponential backoff (2s, 4s...)
+                }
+            } else {
+                $success = true;
+            }
+        }
 
         if ($err) {
             Log::error("NSE cURL Error: " . $err);

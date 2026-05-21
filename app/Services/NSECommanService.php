@@ -199,9 +199,6 @@ class NSECommanService
         if (isset($creds['cookie_abck'])) $cookieString .= '; _abck=' . $creds['cookie_abck'];
         if (isset($creds['cookie_bm_sz'])) $cookieString .= '; bm_sz=' . $creds['cookie_bm_sz'];
 
-        $fp   = fopen($savePath, 'wb+');
-        $curl = curl_init();
-
         $isGz = str_ends_with(strtolower($fileName), '.gz') || str_ends_with(strtolower($fileName), '.zip');
         $headers = [
             'Authorization: Bearer ' . $authToken,
@@ -214,7 +211,6 @@ class NSECommanService
 
         $curlOpts = [
             CURLOPT_URL            => $url,
-            CURLOPT_FILE           => $fp,
             CURLOPT_MAXREDIRS      => 10,
             CURLOPT_TIMEOUT        => 0,
             CURLOPT_FOLLOWLOCATION => true,
@@ -229,15 +225,41 @@ class NSECommanService
             $curlOpts[CURLOPT_ENCODING] = '';
         }
 
-        curl_setopt_array($curl, $curlOpts);
+        $maxRetries = 3;
+        $attempt = 0;
+        $success = false;
+        
+        $err = '';
+        $httpCode = 0;
+        $contentType = '';
 
-        curl_exec($curl);
-        $httpCode    = curl_getinfo($curl, CURLINFO_HTTP_CODE);
-        $contentType = curl_getinfo($curl, CURLINFO_CONTENT_TYPE);
-        $err         = curl_error($curl);
+        while ($attempt < $maxRetries && !$success) {
+            $attempt++;
 
-        curl_close($curl);
-        fclose($fp);
+            $fp   = fopen($savePath, 'wb+');
+            $curlOpts[CURLOPT_FILE] = $fp;
+            
+            $curl = curl_init();
+            curl_setopt_array($curl, $curlOpts);
+
+            curl_exec($curl);
+            $httpCode    = curl_getinfo($curl, CURLINFO_HTTP_CODE);
+            $contentType = curl_getinfo($curl, CURLINFO_CONTENT_TYPE);
+            $err         = curl_error($curl);
+
+            curl_close($curl);
+            fclose($fp);
+
+            if ($err || $httpCode >= 500 || $httpCode === 429) {
+                Log::warning("NSE Comman API Download Attempt $attempt Failed for $fileName: " . ($err ?: "HTTP $httpCode"));
+                if ($attempt < $maxRetries) {
+                    if (file_exists($savePath)) unlink($savePath);
+                    sleep(2 * $attempt);
+                }
+            } else {
+                $success = true;
+            }
+        }
 
         if ($err) {
             Log::error("NSE Common cURL Error: " . $err);
