@@ -179,7 +179,7 @@ class SyncNseFolders implements ShouldQueue, ShouldBeUnique
 
             if (!$existing) {
 
-                NseContent::create([
+                $newRecord = NseContent::create([
                     'segment' => $segment,
                     'parent_folder' => $parent,
                     'name' => $name,

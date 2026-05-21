@@ -81,6 +81,10 @@ class SyncNseCommonFileJob
         if ($this->source === 'archive') {
 
             if (!$this->authToken) {
+                $this->authToken = $nseService->getAuthToken();
+            }
+
+            if (!$this->authToken) {
                 throw new \Exception("Missing auth token for archive download.");
             }
 
@@ -121,6 +125,10 @@ class SyncNseCommonFileJob
         if (!$shouldDownload) {
             Log::info("Common: Skipping download, local file is up to date: {$fileRecord->name}");
             return;
+        }
+
+        if (!$this->authToken) {
+            $this->authToken = $nseService->getAuthToken();
         }
 
         if (!$this->authToken) {

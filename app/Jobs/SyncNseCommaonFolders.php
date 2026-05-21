@@ -182,7 +182,7 @@ class SyncNseCommaonFolders implements ShouldQueue, ShouldBeUnique
             */
             if (!$existing) {
 
-                NseCommanContent::create([
+                $newRecord = NseCommanContent::create([
                     'segment' => $segment,
                     'parent_folder' => $parent,
                     'name' => $name,
