@@ -39,8 +39,10 @@ Route::group(['middleware' => 'auth'], function () {
             'status' => 'idle'
         ]);
     })->name('nse.sync.progress');
+
     // Admin prefix routes
     Route::group(['middleware' => 'auth', 'prefix' => 'admin'], function () {
+
         // Access only for admin
         Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard.index');
         Route::post('/logout', [AdminController::class, 'logout'])->name('admin.logout');
@@ -85,8 +87,6 @@ Route::group(['middleware' => 'auth'], function () {
         Route::get('/nse/{segment}/contents', [NseController::class, 'getFolderContentsAjax'])
             ->name('nse.folder.contents.ajax');
 
-        // routes/web.php
-
         // Common Segment Routes
         Route::prefix('nse/common')->name('nse.common.')->group(function () {
 
@@ -101,8 +101,8 @@ Route::group(['middleware' => 'auth'], function () {
         });
 
 
-        // BSE
-        // Route::get('/files/bse', [BSEController::class, 'index'])->name('bse.index');
+        // ----------------------BSE Routes --------------------------------------------//
+        Route::get('/files/bse', [BSEController::class, 'index'])->name('bse.index');
         // Route::get('/files/bse/{segment}', [BSEController::class, 'index'])->name('bse.segment');
         // Route::get('/files/bse/{segment}/{folder}/today', [BSEController::class, 'getTodaySegmentFolder'])->name('bse.segment.folder.today');
 

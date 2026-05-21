@@ -130,7 +130,6 @@ class NSEController extends Controller
                 'segment',
                 'path',
                 'parent_folder',
-                'path',
                 'nse_created_at',
                 'nse_modified_at',
                 'is_downloaded'
@@ -164,6 +163,9 @@ class NSEController extends Controller
 */
     public function syncBackground(Request $request, $segment)
     {
+        // Release session lock early to prevent UI hangs (like logout) during long syncs
+        session()->save();
+
         $segment = Str::upper($segment);
         $folder  = (string) ($request->input('folder') ?? '');
         $parent  = $folder ?: 'root';
@@ -183,9 +185,13 @@ class NSEController extends Controller
         try {
             $this->syncMemberSegment($segment, $folder);
 
-            // ✅ Bust both cache keys — data + modified times
-            Cache::forget($cacheKey);
-            Cache::forget($modifiedCacheKey);
+            // ✅ Bust cache by incrementing the cache version
+            $versionKey = $this->buildVersionKey($segment, $parent);
+            if (Cache::has($versionKey)) {
+                Cache::increment($versionKey);
+            } else {
+                Cache::put($versionKey, 2);
+            }
 
             // ✅ Use now() directly — sync just completed, no extra DB query needed
             $lastSyncedFormatted = Carbon::now()->timezone('Asia/Kolkata')->format('h:i a');
@@ -229,7 +235,6 @@ class NSEController extends Controller
                 'segment',
                 'path',
                 'parent_folder',
-                'path',
                 'nse_created_at',
                 'nse_modified_at',
                 'is_downloaded'
@@ -287,9 +292,15 @@ class NSEController extends Controller
 | Private Helpers
 |--------------------------------------------------------------------------
 */
+    private function buildVersionKey(string $segment, string $parent): string
+    {
+        return 'nse_version_' . Str::slug($segment) . '_' . Str::slug($parent);
+    }
+
     private function buildCacheKey(string $segment, string $parent): string
     {
-        return 'nse_contents_' . Str::slug($segment) . '_' . Str::slug($parent);
+        $version = Cache::get($this->buildVersionKey($segment, $parent), 1);
+        return 'nse_contents_' . Str::slug($segment) . '_' . Str::slug($parent) . '_v' . $version;
     }
 
     private function buildLockKey(string $segment, string $parent): string
@@ -297,10 +308,10 @@ class NSEController extends Controller
         return 'nse_sync_lock_' . Str::slug($segment) . '_' . Str::slug($parent);
     }
 
-    // ✅ New helper — for caching computeFolderModifiedTimes result
     private function buildModifiedCacheKey(string $segment, string $parent): string
     {
-        return 'nse_modified_' . Str::slug($segment) . '_' . Str::slug($parent);
+        $version = Cache::get($this->buildVersionKey($segment, $parent), 1);
+        return 'nse_modified_' . Str::slug($segment) . '_' . Str::slug($parent) . '_v' . $version;
     }
 
     private function computeFolderModifiedTimes($contents, string $segment)
@@ -481,6 +492,9 @@ class NSEController extends Controller
 
     public function prepareDownload(Request $request, $id)
     {
+        // Release session lock early to prevent blocking concurrent requests
+        session()->save();
+
         try {
             $source     = $request->query('source', 'today');
             $fileRecord = NseContent::findOrFail($id);
@@ -575,6 +589,9 @@ class NSEController extends Controller
 
     public function prepareBulkDownload(Request $request)
     {
+        // Release session lock early
+        session()->save();
+
         try {
             $ids = array_unique($request->input('ids', []));
 

@@ -21,6 +21,16 @@ class NSEService
 
     public function getAuthToken()
     {
+        $validToken = \App\Models\NseAuthToken::where('expires_at', '>', Carbon::now())->first();
+        if ($validToken) {
+            return $validToken->token;
+        }
+
+        return $this->generateAndStoreToken();
+    }
+
+    public function generateAndStoreToken()
+    {
         try {
             $testMode = $this->nseCredentials['test_mode'] ?? false;
             $encryptedPassword = encryptPassword($this->nseCredentials['password'], $this->nseCredentials['secret']);
@@ -51,9 +61,11 @@ class NSEService
             }
 
             if (isset($data['status']) && $data['status'] === 'success') {
-                Session::put('nse_auth_token', [
-                    'value' => $data['token'],
-                    'expires_at' => Carbon::now()->addMinutes(60)->timestamp
+                \App\Models\NseAuthToken::truncate();
+                
+                \App\Models\NseAuthToken::create([
+                    'token' => $data['token'],
+                    'expires_at' => Carbon::now()->addMinutes(60)
                 ]);
                 return $data['token'];
             } else {
@@ -65,7 +77,7 @@ class NSEService
         }
     }
 
-    public function getFolderFilesList($authToken, $segment, $folder)
+    public function getFolderFilesList($authToken, $segment, $folder, $isRetry = false)
     {
         $creds = $this->nseCredentials;
 
@@ -123,6 +135,11 @@ class NSEService
             return ['status' => 'error', 'message' => $err];
         }
 
+        if ($info['http_code'] === 401 && !$isRetry) {
+            $newToken = $this->generateAndStoreToken();
+            return $this->getFolderFilesList($newToken, $segment, $folder, true);
+        }
+
         if ($info['http_code'] !== 200) {
             Session::put('member_api_success', false);
             Log::warning("NSE API non-200 response", [
@@ -168,7 +185,7 @@ class NSEService
         );
     }
 
-    public function downloadFileFromApi($authToken, $segment, $folder, $fileName, $savePath)
+    public function downloadFileFromApi($authToken, $segment, $folder, $fileName, $savePath, $isRetry = false)
     {
         $creds = $this->nseCredentials;
 
@@ -187,10 +204,19 @@ class NSEService
         $fp   = fopen($savePath, 'wb+');  // ✅ binary mode
         $curl = curl_init();
 
-        curl_setopt_array($curl, array(
+        $isGz = str_ends_with(strtolower($fileName), '.gz') || str_ends_with(strtolower($fileName), '.zip');
+        $headers = [
+            'Authorization: Bearer ' . $authToken,
+            'Cookie: ' . $cookieString,
+        ];
+
+        if ($isGz) {
+            $headers[] = 'Accept-Encoding: identity'; // ✅ no HTTP compression for pre-compressed files to avoid server bugs
+        }
+
+        $curlOpts = [
             CURLOPT_URL            => $url,
             CURLOPT_FILE           => $fp,
-            // ✅ CURLOPT_ENCODING removed entirely
             CURLOPT_MAXREDIRS      => 10,
             CURLOPT_TIMEOUT        => 0,
             CURLOPT_FOLLOWLOCATION => true,
@@ -198,12 +224,14 @@ class NSEService
             CURLOPT_CUSTOMREQUEST  => 'GET',
             CURLOPT_SSL_VERIFYPEER => false,
             CURLOPT_USERAGENT      => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            CURLOPT_HTTPHEADER     => array(
-                'Authorization: Bearer ' . $authToken,
-                'Cookie: ' . $cookieString,
-                'Accept-Encoding: identity',  // ✅ no HTTP compression
-            ),
-        ));
+            CURLOPT_HTTPHEADER     => $headers,
+        ];
+
+        if (!$isGz) {
+            $curlOpts[CURLOPT_ENCODING] = ''; // ✅ Enable gzip/br compression over the wire for plain text files
+        }
+
+        curl_setopt_array($curl, $curlOpts);
 
         curl_exec($curl);
         $httpCode    = curl_getinfo($curl, CURLINFO_HTTP_CODE);
@@ -218,6 +246,12 @@ class NSEService
             saveSyncLog('member', $segment, '400', '', 'NSE cURL Error: ' . $err);
             if (file_exists($savePath)) unlink($savePath);
             return false;
+        }
+
+        if ($httpCode === 401 && !$isRetry) {
+            if (file_exists($savePath)) unlink($savePath);
+            $newToken = $this->generateAndStoreToken();
+            return $this->downloadFileFromApi($newToken, $segment, $folder, $fileName, $savePath, true);
         }
 
         // ✅ Guard against HTML error pages being saved as files
@@ -281,15 +315,8 @@ class NSEService
             return $filePath;
         }
 
-        $bufferSize = 65536;  // ✅ 64KB buffer, much faster than 4096
-        while (!gzeof($file)) {
-            $chunk = gzread($file, $bufferSize);
-            if ($chunk === false) {
-                Log::error("GZ Decompress: gzread() failed mid-stream");
-                break;
-            }
-            fwrite($outFile, $chunk);
-        }
+        // stream_copy_to_stream is highly optimized in C and faster than a user-space loop
+        stream_copy_to_stream($file, $outFile);
 
         fclose($outFile);
         gzclose($file);
@@ -335,20 +362,11 @@ class NSEService
         }
 
         $lineCount = 0;
+        // Native fputcsv is significantly faster than user-space array_map quoting
         while (($line = fgets($inputHandle)) !== false) {
-            $line   = rtrim($line, "\r\n");  // ✅ only strip line endings
+            $line = rtrim($line, "\r\n");
             $fields = explode('|', $line);
-
-            // ✅ Proper RFC 4180 CSV quoting
-            $fields = array_map(function ($field) {
-                $field = str_replace('"', '""', $field);
-                if (strpos($field, ',') !== false || strpos($field, '"') !== false || strpos($field, "\n") !== false) {
-                    $field = '"' . $field . '"';
-                }
-                return $field;
-            }, $fields);
-
-            fwrite($outputHandle, implode(',', $fields) . "\n");
+            fputcsv($outputHandle, $fields, ',');
             $lineCount++;
         }
 

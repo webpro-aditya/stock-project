@@ -2,21 +2,34 @@
 
 namespace Database\Seeders;
 
-// use Illuminate\Database\Console\Seeds\WithoutModelEvents;
+use App\Models\Plot;
+use App\Models\User;
 use Illuminate\Database\Seeder;
 
 class DatabaseSeeder extends Seeder
 {
-    /**
-     * Seed the application's database.
-     */
     public function run(): void
     {
-        // \App\Models\User::factory(10)->create();
+        // 1. Create a test Exhibitor user so you can log in easily
+        User::factory()->create([
+            'name' => 'Test Exhibitor',
+            'email' => 'test@example.com',
+            'password' => bcrypt('password'),
+            'role' => 'exhibitor',
+        ]);
 
-        // \App\Models\User::factory()->create([
-        //     'name' => 'Test User',
-        //     'email' => 'test@example.com',
-        // ]);
+        // 2. Hardcode our ExpoMart Plots
+        $plots = [
+            'Premium-A1', 'Premium-A2', 'Premium-A3', 'Premium-A4',
+            'Standard-B1', 'Standard-B2', 'Standard-B3', 'Standard-B4',
+            'Economy-C1', 'Economy-C2', 'Economy-C3', 'Economy-C4',
+        ];
+
+        foreach ($plots as $plotName) {
+            Plot::create([
+                'name' => $plotName,
+                'status' => 'available',
+            ]);
+        }
     }
 }

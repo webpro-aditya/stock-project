@@ -80,61 +80,51 @@ class NSECommanController extends Controller
 
         /*
     |--------------------------------------------------------------------------
-    | Direct Query (NO CACHE)
+    | Direct Query (NOW WITH REAL-TIME CACHING)
     |--------------------------------------------------------------------------
     */
-        $query = NseCommanContent::select([
-            'id',
-            'name',
-            'type',
-            'segment',
-            'path',
-            'parent_folder',
-            'nse_created_at',
-            'nse_modified_at',
-            'is_downloaded'
-        ])
-            ->where('segment', $segment)
-            ->where('parent_folder', $parent);
+        $cacheKey = $this->buildCacheKey($segment, $parent) . '_' . md5(serialize($request->all()));
 
-        /*
-    |--------------------------------------------------------------------------
-    | Search
-    |--------------------------------------------------------------------------
-    */
-        if (!empty($search)) {
-            $query->where('name', 'like', "%{$search}%");
-        }
+        $contents = Cache::remember($cacheKey, now()->addMinutes(15), function () use ($segment, $parent, $search, $sort, $direction) {
+            $query = NseCommanContent::select([
+                'id',
+                'name',
+                'type',
+                'segment',
+                'path',
+                'parent_folder',
+                'nse_created_at',
+                'nse_modified_at',
+                'is_downloaded'
+            ])
+                ->where('segment', $segment)
+                ->where('parent_folder', $parent);
 
-        /*
-    |--------------------------------------------------------------------------
-    | Sorting
-    |--------------------------------------------------------------------------
-    */
-        $allowedSorts = ['name', 'nse_created_at', 'nse_modified_at'];
+            if (!empty($search)) {
+                $query->where('name', 'like', "%{$search}%");
+            }
 
-        if (!in_array($sort, $allowedSorts)) {
-            $sort = 'nse_modified_at';
-        }
+            $allowedSorts = ['name', 'nse_created_at', 'nse_modified_at'];
+            if (!in_array($sort, $allowedSorts)) {
+                $sort = 'nse_modified_at';
+            }
 
-        $query->orderBy('type', 'DESC');
-        if (!empty($sort)) {
-            $query->orderBy($sort, $direction);
-        }
+            $query->orderBy('type', 'DESC');
+            if (!empty($sort)) {
+                $query->orderBy($sort, $direction);
+            }
 
-        $contents = $query->paginate($this->perPage);
+            $paginated = $query->paginate($this->perPage);
 
-        /*
-    |--------------------------------------------------------------------------
-    | Folder Modified Logic
-    |--------------------------------------------------------------------------
-    */
-        $collection = $this->computeFolderModifiedTimes(
-            $contents->getCollection(),
-            $segment
-        );
+            $collection = $this->computeFolderModifiedTimes(
+                $paginated->getCollection(),
+                $segment
+            );
 
-        $contents->setCollection($collection);
+            $paginated->setCollection($collection);
+
+            return $paginated;
+        });
 
         return view('admin.nse.common.segment_folder_today', [
             'segment'    => $segment,
@@ -152,6 +142,9 @@ class NSECommanController extends Controller
 */
     public function syncBackground(Request $request, $segment)
     {
+        // Release session lock early to prevent UI hangs (like logout) during long syncs
+        session()->save();
+
         $segment = Str::upper($segment);
         $folder  = (string) ($request->input('folder') ?? '');
         $parent  = $folder ?: 'root';
@@ -177,6 +170,14 @@ class NSECommanController extends Controller
                 'updated' => $updated,
                 'deleted' => $deleted
             ]);
+
+            // ✅ Bust cache by incrementing the cache version
+            $versionKey = $this->buildVersionKey($segment, $parent);
+            if (Cache::has($versionKey)) {
+                Cache::increment($versionKey);
+            } else {
+                Cache::put($versionKey, 2);
+            }
 
             $lastSyncedFormatted = now()
                 ->timezone('Asia/Kolkata')
@@ -227,9 +228,15 @@ class NSECommanController extends Controller
     | Private Helpers
     |--------------------------------------------------------------------------
     */
+    private function buildVersionKey(string $segment, string $parent): string
+    {
+        return 'nse_common_version_' . Str::slug($segment) . '_' . Str::slug($parent);
+    }
+
     private function buildCacheKey(string $segment, string $parent): string
     {
-        return 'nse_common_contents_' . Str::slug($segment) . '_' . Str::slug($parent);
+        $version = Cache::get($this->buildVersionKey($segment, $parent), 1);
+        return 'nse_common_contents_' . Str::slug($segment) . '_' . Str::slug($parent) . '_v' . $version;
     }
 
     private function buildLockKey(string $segment, string $parent): string
@@ -354,6 +361,9 @@ class NSECommanController extends Controller
 
     public function prepareDownload(Request $request, $id)
     {
+        // Release session lock early to prevent blocking concurrent requests
+        session()->save();
+
         try {
             $authToken = $this->nseCommanService->getAuthToken();
 
@@ -426,6 +436,9 @@ class NSECommanController extends Controller
 
     public function prepareBulkDownload(Request $request)
     {
+        // Release session lock early
+        session()->save();
+
         try {
             $ids = array_unique($request->input('ids', []));
 

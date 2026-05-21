@@ -20,6 +20,16 @@ class NSECommanService
 
     public function getAuthToken()
     {
+        $validToken = \App\Models\NseAuthToken::where('expires_at', '>', Carbon::now())->first();
+        if ($validToken) {
+            return $validToken->token;
+        }
+
+        return $this->generateAndStoreToken();
+    }
+
+    public function generateAndStoreToken()
+    {
         try {
             $testMode = $this->nseCredentials['test_mode'] ?? false;
             $encryptedPassword = encryptPassword($this->nseCredentials['password'], $this->nseCredentials['secret']);
@@ -50,9 +60,11 @@ class NSECommanService
             }
 
             if (isset($data['status']) && $data['status'] === 'success') {
-                Session::put('nse_auth_token', [
-                    'value' => $data['token'],
-                    'expires_at' => Carbon::now()->addMinutes(60)->timestamp
+                \App\Models\NseAuthToken::truncate();
+                
+                \App\Models\NseAuthToken::create([
+                    'token' => $data['token'],
+                    'expires_at' => Carbon::now()->addMinutes(60)
                 ]);
                 return $data['token'];
             } else {
@@ -64,7 +76,7 @@ class NSECommanService
         }
     }
 
-    public function getFolderFilesList($authToken, $segment, $folder)
+    public function getFolderFilesList($authToken, $segment, $folder, $isRetry = false)
     {
         $creds = $this->nseCredentials;
 
@@ -122,6 +134,11 @@ class NSECommanService
             return ['status' => 'error', 'message' => $err];
         }
 
+        if ($info['http_code'] === 401 && !$isRetry) {
+            $newToken = $this->generateAndStoreToken();
+            return $this->getFolderFilesList($newToken, $segment, $folder, true);
+        }
+
         if ($info['http_code'] !== 200) {
             Session::put('common_api_success', false);
             Log::warning("NSE API non-200 response", [
@@ -166,7 +183,7 @@ class NSECommanService
         );
     }
 
-    public function downloadFileFromApi($authToken, $segment, $folder, $fileName, $savePath)
+    public function downloadFileFromApi($authToken, $segment, $folder, $fileName, $savePath, $isRetry = false)
     {
         $creds = $this->nseCredentials;
 
@@ -185,7 +202,17 @@ class NSECommanService
         $fp   = fopen($savePath, 'wb+');
         $curl = curl_init();
 
-        curl_setopt_array($curl, array(
+        $isGz = str_ends_with(strtolower($fileName), '.gz') || str_ends_with(strtolower($fileName), '.zip');
+        $headers = [
+            'Authorization: Bearer ' . $authToken,
+            'Cookie: ' . $cookieString,
+        ];
+
+        if ($isGz) {
+            $headers[] = 'Accept-Encoding: identity';
+        }
+
+        $curlOpts = [
             CURLOPT_URL            => $url,
             CURLOPT_FILE           => $fp,
             CURLOPT_MAXREDIRS      => 10,
@@ -195,12 +222,14 @@ class NSECommanService
             CURLOPT_CUSTOMREQUEST  => 'GET',
             CURLOPT_SSL_VERIFYPEER => false,
             CURLOPT_USERAGENT      => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            CURLOPT_HTTPHEADER     => array(
-                'Authorization: Bearer ' . $authToken,
-                'Cookie: ' . $cookieString,
-                'Accept-Encoding: identity',
-            ),
-        ));
+            CURLOPT_HTTPHEADER     => $headers,
+        ];
+
+        if (!$isGz) {
+            $curlOpts[CURLOPT_ENCODING] = '';
+        }
+
+        curl_setopt_array($curl, $curlOpts);
 
         curl_exec($curl);
         $httpCode    = curl_getinfo($curl, CURLINFO_HTTP_CODE);
@@ -215,6 +244,12 @@ class NSECommanService
             saveSyncLog('common', $segment, '400', '', 'NSE Common cURL Error: ' . $err);
             if (file_exists($savePath)) unlink($savePath);
             return false;
+        }
+
+        if ($httpCode === 401 && !$isRetry) {
+            if (file_exists($savePath)) unlink($savePath);
+            $newToken = $this->generateAndStoreToken();
+            return $this->downloadFileFromApi($newToken, $segment, $folder, $fileName, $savePath, true);
         }
 
         if (!empty($contentType) && str_contains($contentType, 'text/html')) {
@@ -276,15 +311,7 @@ class NSECommanService
             return $filePath;
         }
 
-        $bufferSize = 65536;
-        while (!gzeof($file)) {
-            $chunk = gzread($file, $bufferSize);
-            if ($chunk === false) {
-                Log::error("GZ Decompress [common]: gzread() failed mid-stream");
-                break;
-            }
-            fwrite($outFile, $chunk);
-        }
+        stream_copy_to_stream($file, $outFile);
 
         fclose($outFile);
         gzclose($file);
@@ -332,16 +359,7 @@ class NSECommanService
         while (($line = fgets($inputHandle)) !== false) {
             $line   = rtrim($line, "\r\n");
             $fields = explode('|', $line);
-
-            $fields = array_map(function ($field) {
-                $field = str_replace('"', '""', $field);
-                if (strpos($field, ',') !== false || strpos($field, '"') !== false || strpos($field, "\n") !== false) {
-                    $field = '"' . $field . '"';
-                }
-                return $field;
-            }, $fields);
-
-            fwrite($outputHandle, implode(',', $fields) . "\n");
+            fputcsv($outputHandle, $fields, ',');
             $lineCount++;
         }
 

@@ -12,6 +12,9 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Session;
 use Illuminate\Validation\Rule;
+use Carbon\Carbon;
+use App\Models\NseAuthToken;
+use App\Services\NSEService;
 
 
 class AdminController extends Controller
@@ -34,6 +37,12 @@ class AdminController extends Controller
       try{
         if (Auth::attempt($validator)) {
             $request->session()->regenerate();
+
+            $validToken = NseAuthToken::where('expires_at', '>', Carbon::now())->first();
+            if (!$validToken) {
+                $nseService = new NSEService();
+                $nseService->generateAndStoreToken();
+            }
 
             return redirect()->route('nse.segment.folder.today', ['segment' => 'CM', 'folder' => 'root']);
         }

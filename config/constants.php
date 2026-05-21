@@ -37,4 +37,12 @@ return [
         'test_mode' => env('NSE_TEST_MODE', false),
         'cron_enabled' => env('NSE_CRON_ENABLED', true)
     ],
+
+    'bse' => [
+        'hostname' => env('BSE_HOSTNAME'),
+        'port' => env('BSE_PORT'),
+        'login_id' => env('BSE_LOGINID'),
+        'password' => env('BSE_PASSWORD'),
+        'member_code' => env('BSE_MEMBER_CODE')
+    ]
 ];
