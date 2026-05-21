@@ -99,6 +99,10 @@ class NSEController extends Controller
         $currentFolder = $request->query('folder') ?? '';
         $parent        = $currentFolder ?: 'root';
 
+        $search    = $request->query('search');
+        $sort      = $request->query('sort', 'nse_modified_at');
+        $direction = $request->query('direction', 'desc');
+
         // ✅ Single SyncJob query — upsert + reuse for lastSynced
         $syncJob = SyncJob::where('type', 'member')
             ->where('segment', $segment)
@@ -119,11 +123,11 @@ class NSEController extends Controller
             ->timezone('Asia/Kolkata')
             ->format('Y-m-d h:i:s A');
 
-        // ✅ Fetch from cache with specific columns only
-        $cacheKey = $this->buildCacheKey($segment, $parent);
+        // ✅ Fetch from cache with specific columns only (NOW WITH REAL-TIME CACHING AND SEARCH PARAMS)
+        $cacheKey = $this->buildCacheKey($segment, $parent) . '_' . md5(serialize($request->all()));
 
-        $contents = Cache::remember($cacheKey, now()->addMinutes(15), function () use ($segment, $parent) {
-            return NseContent::select([
+        $contents = Cache::remember($cacheKey, now()->addMinutes(15), function () use ($segment, $parent, $search, $sort, $direction) {
+            $query = NseContent::select([
                 'id',
                 'name',
                 'type',
@@ -135,17 +139,32 @@ class NSEController extends Controller
                 'is_downloaded'
             ])
                 ->where('segment', $segment)
-                ->where('parent_folder', $parent)
-                ->orderBy('type', 'DESC')
-                ->orderBy('nse_modified_at', 'DESC')
-                ->get();
-        });
+                ->where('parent_folder', $parent);
 
-        // ✅ Cache the computed folder modified times too
-        $modifiedCacheKey = $this->buildModifiedCacheKey($segment, $parent);
+            if (!empty($search)) {
+                $query->where('name', 'like', "%{$search}%");
+            }
 
-        $contents = Cache::remember($modifiedCacheKey, now()->addMinutes(15), function () use ($contents, $segment) {
-            return $this->computeFolderModifiedTimes($contents, $segment);
+            $allowedSorts = ['name', 'nse_created_at', 'nse_modified_at'];
+            if (!in_array($sort, $allowedSorts)) {
+                $sort = 'nse_modified_at';
+            }
+
+            $query->orderBy('type', 'DESC');
+            if (!empty($sort)) {
+                $query->orderBy($sort, $direction);
+            }
+
+            $paginated = $query->paginate($this->perPage);
+
+            $collection = $this->computeFolderModifiedTimes(
+                $paginated->getCollection(),
+                $segment
+            );
+
+            $paginated->setCollection($collection);
+
+            return $paginated;
         });
 
         return view('admin.nse.segment_folder_today', [
@@ -183,7 +202,13 @@ class NSEController extends Controller
         Cache::put($lockKey, true, now()->addMinutes(3));
 
         try {
-            $this->syncMemberSegment($segment, $folder);
+            $result = $this->syncMemberSegment($segment, $folder);
+
+            $created = $result['created'] ?? 0;
+            $updated = $result['updated'] ?? 0;
+            $deleted = $result['deleted'] ?? 0;
+
+            $hasChanges = ($created + $deleted) > 0;
 
             // ✅ Bust cache by incrementing the cache version
             $versionKey = $this->buildVersionKey($segment, $parent);
@@ -198,6 +223,13 @@ class NSEController extends Controller
 
             return response()->json([
                 'status'     => 'ok',
+                'created'    => $created,
+                'updated'    => $updated,
+                'deleted'    => $deleted,
+                'hasChanges' => $hasChanges,
+                'message'    => $hasChanges
+                    ? "Updated ({$created} new, {$updated} modified, {$deleted} removed)"
+                    : "Already up to date",
                 'lastSynced' => $lastSyncedFormatted,
             ]);
         } catch (\Throwable $e) {
@@ -280,11 +312,13 @@ class NSEController extends Controller
                 'segment' => $segment,
             ],
             [
-                'updated_at' => Carbon::now(),
+                'updated_at' => Carbon::now()
             ]
         );
 
-        SyncNseFolders::dispatch($segment, $folder);
+        // ✅ Execute inline to get counts instead of background queue
+        $job = new SyncNseFolders($segment, $folder);
+        return app()->call([$job, 'handle']);
     }
 
     /*

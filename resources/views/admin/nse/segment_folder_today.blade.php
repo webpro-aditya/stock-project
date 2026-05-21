@@ -175,23 +175,76 @@ $path = '';
         </div>
 
 
-        <div class="relative overflow-x-auto">
-            <table class="text-sm NseSegmentTable text-left" @if($contents->count() > 0) id="activityTable" @endif>
-                <thead class="text-xs text-gray-700 font-bold uppercase bg-gray-100 sticky top-0">
+        {{-- Search --}}
+        <form method="GET" class="p-4 flex gap-3">
+            <input type="hidden" name="folder" value="{{ request('folder') }}">
+
+            <input type="text"
+                name="search"
+                value="{{ request('search') }}"
+                placeholder="Search..."
+                class="border px-3 py-2 rounded">
+
+            <button class="bg-brand text-white px-4 py-2 rounded">
+                Search
+            </button>
+
+            @if(request('search'))
+            <a href="{{ request()->url() }}?folder={{ request('folder') }}">Clear</a>
+            @endif
+        </form>
+
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead class="bg-gray-100 text-xs font-semibold uppercase tracking-wider text-gray-500">
                     <tr>
-                        <th scope="col" class="px-4 py-3 w-12">
-                            <input type="checkbox" onchange="toggleAll(this)"
-                                class="w-4 h-4 custom-checkbox rounded border-gray-300">
+                        <th class="px-4 py-3 w-10">
+                            <input type="checkbox" onchange="toggleAll(this)" class="w-4 h-4 rounded border-gray-300">
                         </th>
-                        <th scope="col" class="px-6 py-3" style="display: none;">Type</th>
-                        <th scope="col" class="px-6 py-3 folder_col">Folder / File Name</th>
-                        <th scope="col" class="px-6 py-3 CreatedDate">Created</th>
-                        <th scope="col" class="px-6 py-3 LastUpdate">Last Updated</th>
-                        <th scope="col" class="px-6 py-3 text-right action_col">Action</th>
+
+                        <th class="px-6 py-3 text-left">
+                            <a href="{{ request()->fullUrlWithQuery(['sort' => 'name', 'direction' => request('direction') === 'asc' ? 'desc' : 'asc']) }}"
+                                class="inline-flex items-center gap-1.5 hover:text-gray-800 transition-colors">
+                                Folder / File Name
+                                @if(request('sort') == 'name')
+                                <i data-lucide="{{ request('direction') == 'asc' ? 'arrow-up' : 'arrow-down' }}"
+                                    class="w-3.5 h-3.5 text-brand"></i>
+                                @else
+                                <i data-lucide="arrow-up-down" class="w-3.5 h-3.5 text-gray-300"></i>
+                                @endif
+                            </a>
+                        </th>
+
+                        <th class="px-6 py-3 text-left">
+                            <a href="{{ request()->fullUrlWithQuery(['sort' => 'nse_created_at', 'direction' => request('direction') === 'asc' ? 'desc' : 'asc']) }}"
+                                class="inline-flex items-center gap-1.5 hover:text-gray-800 transition-colors">
+                                Created
+                                @if(request('sort') == 'nse_created_at')
+                                <i data-lucide="{{ request('direction') == 'asc' ? 'arrow-up' : 'arrow-down' }}"
+                                    class="w-3.5 h-3.5 text-brand"></i>
+                                @else
+                                <i data-lucide="arrow-up-down" class="w-3.5 h-3.5 text-gray-300"></i>
+                                @endif
+                            </a>
+                        </th>
+
+                        <th class="px-6 py-3 text-left">
+                            <a href="{{ request()->fullUrlWithQuery(['sort' => 'nse_modified_at', 'direction' => request('direction') === 'asc' ? 'desc' : 'asc']) }}"
+                                class="inline-flex items-center gap-1.5 hover:text-gray-800 transition-colors">
+                                Last Updated
+                                @if(request('sort') == 'nse_modified_at')
+                                <i data-lucide="{{ request('direction') == 'asc' ? 'arrow-up' : 'arrow-down' }}"
+                                    class="w-3.5 h-3.5 text-brand"></i>
+                                @else
+                                <i data-lucide="arrow-up-down" class="w-3.5 h-3.5 text-gray-300"></i>
+                                @endif
+                            </a>
+                        </th>
+
+                        <th class="px-6 py-3 text-center">Action</th>
                     </tr>
                 </thead>
-                {{-- In the table, replace the @forelse block with: --}}
-                <tbody id="folderTableBody">
+                <tbody>
                     @include('admin.nse._folder_table_rows', [
                     'contents' => $contents,
                     'segment' => $segment,
@@ -199,6 +252,10 @@ $path = '';
                     ])
                 </tbody>
             </table>
+
+            <div class="p-4">
+                {{ $contents->appends(request()->query())->links() }}
+            </div>
         </div>
     </div>
 
@@ -279,8 +336,6 @@ $path = '';
                 if (badge) badge.style.display = 'none';
 
                 if (data.status === 'ok') {
-                    refreshFolderTable(segment, folder, data.lastSynced);
-
                     // Show green done badge, auto-hide after 4s
                     if (doneBadge) {
                         doneBadge.style.display = 'inline-flex';
@@ -292,50 +347,6 @@ $path = '';
             })
             .catch(() => {
                 if (badge) badge.style.display = 'none';
-            });
-    }
-
-    // ─── Refresh Folder Table via AJAX ───────────────────────────────────────
-    function refreshFolderTable(segment, folder, lastSynced) {
-        const url = "{{ route('nse.folder.contents.ajax', ['segment' => ':seg']) }}"
-            .replace(':seg', segment) + '?folder=' + encodeURIComponent(folder);
-
-        fetch(url, {
-                headers: {
-                    'X-Requested-With': 'XMLHttpRequest'
-                }
-            })
-            .then(res => res.json())
-            .then(data => {
-                if (data.status === 'ok') {
-                    // Step 1: Inject rows
-                    const tbody = document.getElementById('folderTableBody');
-                    if (!tbody) return; // safety guard
-                    tbody.innerHTML = data.html;
-
-                    // ✅ Step 2: Ensure table always has its id before DataTables init
-                    const table = tbody.closest('table');
-                    if (table && !table.id) {
-                        table.id = 'activityTable';
-                    }
-
-                    // Step 3: Reinit DataTables
-                    if (typeof window.initActivityTable === 'function') {
-                        window.initActivityTable();
-                    }
-
-                    // Step 4: Reinit Lucide icons
-                    if (typeof lucide !== 'undefined') lucide.createIcons();
-
-                    // Step 5: Update last synced text
-                    if (lastSynced) {
-                        const syncedEl = document.querySelector('[data-last-synced]');
-                        if (syncedEl) syncedEl.textContent = lastSynced;
-                    }
-                }
-            })
-            .catch(() => {
-                // Silent fail — cached data remains visible
             });
     }
 
@@ -365,11 +376,16 @@ $path = '';
                 lucide.createIcons();
 
                 if (data.status === 'ok') {
-                    Toast.fire({
-                        icon: 'success',
-                        title: 'Sync completed. Refreshing...'
-                    });
-                    refreshFolderTable(segment, folder, data.lastSynced);
+                    if (data.hasChanges) {
+                        Toast.fire({
+                            icon: 'success',
+                            title: data.message || 'Changes detected. Updating...'
+                        });
+                        sessionStorage.setItem('sync_reloaded', '1');
+                        setTimeout(() => {
+                            window.location.reload();
+                        }, 600);
+                    }
                 } else if (data.status === 'in_progress') {
                     Toast.fire({
                         icon: 'info',

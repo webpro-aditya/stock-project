@@ -301,5 +301,69 @@
                     });
                 });
         }
+
+        // ─── Manual Sync Now Button ───────────────────────────────────────────────
+        function syncNow(segment) {
+            const btn = document.querySelector('.btn-sync');
+            const originalHtml = btn.innerHTML;
+
+            btn.disabled = true;
+            btn.innerHTML = '<i data-lucide="loader-circle" class="w-4 h-4 animate-spin"></i> SYNCING...';
+            lucide.createIcons();
+
+            fetch("{{ route('nse.sync.background', ['segment' => ':seg']) }}".replace(':seg', segment), {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+                    },
+                    body: JSON.stringify({
+                        folder: 'root'
+                    })
+                })
+                .then(res => res.json())
+                .then(data => {
+                    btn.disabled = false;
+                    btn.innerHTML = originalHtml;
+                    lucide.createIcons();
+
+                    if (data.status === 'ok') {
+                        if (data.hasChanges) {
+                            Toast.fire({
+                                icon: 'success',
+                                title: data.message || 'Changes detected. Updating...'
+                            });
+                            sessionStorage.setItem('sync_reloaded', '1');
+                            setTimeout(() => {
+                                window.location.reload();
+                            }, 600);
+                        } else {
+                            Toast.fire({
+                                icon: 'info',
+                                title: 'Already up to date'
+                            });
+                        }
+                    } else if (data.status === 'in_progress') {
+                        Toast.fire({
+                            icon: 'info',
+                            title: 'Sync already in progress.'
+                        });
+                    } else {
+                        Toast.fire({
+                            icon: 'error',
+                            title: 'Sync failed. Please retry.'
+                        });
+                    }
+                })
+                .catch(() => {
+                    btn.disabled = false;
+                    btn.innerHTML = originalHtml;
+                    lucide.createIcons();
+                    Toast.fire({
+                        icon: 'error',
+                        title: 'Something went wrong.'
+                    });
+                });
+        }
     </script>
     @endsection

@@ -40,6 +40,10 @@ class SyncNseFolders implements ShouldQueue, ShouldBeUnique
 
     public function handle(NSEService $nseService)
     {
+        $created = 0;
+        $updated = 0;
+        $deleted = 0;
+
         $authToken = $nseService->getAuthToken();
 
         if (!$authToken) {
@@ -48,7 +52,7 @@ class SyncNseFolders implements ShouldQueue, ShouldBeUnique
                 'root' => $this->folder ?: '(root)'
             ]);
             saveSyncLog('member', $this->segment, '401', '803', 'Starting NSE Member sync -- Login token Gen. Failed. Folder: ' . $this->folder ?: '(root)');
-            return false;
+            return ['created' => 0, 'updated' => 0, 'deleted' => 0];
         }
 
         Log::channel('syncron')->info("Starting NSE Member sync", [
@@ -57,18 +61,31 @@ class SyncNseFolders implements ShouldQueue, ShouldBeUnique
         ]);
         saveSyncLog('member', $this->segment, '200', '', 'Starting NSE Member sync for folder ' . $this->folder ?: '(root)');
 
-        $this->syncSingleFolder(
+        $result = $this->syncSingleFolder(
             $nseService,
             $authToken,
             $this->segment,
             $this->folder
         );
 
+        $created += $result['created'];
+        $updated += $result['updated'];
+        $deleted += $result['deleted'];
+
         Log::channel('syncron')->info("NSE sync completed", [
-            'segment' => $this->segment
+            'segment' => $this->segment,
+            'created' => $created,
+            'updated' => $updated,
+            'deleted' => $deleted
         ]);
 
         saveSyncLog('member', $this->segment, '200', '', 'NSE sync completed');
+
+        return [
+            'created' => $created,
+            'updated' => $updated,
+            'deleted' => $deleted
+        ];
     }
 
     /**
@@ -97,7 +114,10 @@ class SyncNseFolders implements ShouldQueue, ShouldBeUnique
         string $authToken,
         string $segment,
         string $currentPath = ''
-    ): void {
+    ): array {
+        $created = 0;
+        $updated = 0;
+        $deleted = 0;
 
         DB::connection()->disableQueryLog();
 
@@ -134,11 +154,11 @@ class SyncNseFolders implements ShouldQueue, ShouldBeUnique
                 'API error while fetching folder ' . ($currentPath ?: 'root')
             );
 
-            return;
+            return ['created' => $created, 'updated' => $updated, 'deleted' => $deleted];
         }
 
         if (empty($apiResponse['data']) || !is_array($apiResponse['data'])) {
-            return;
+            return ['created' => $created, 'updated' => $updated, 'deleted' => $deleted];
         }
 
         /*
@@ -191,6 +211,8 @@ class SyncNseFolders implements ShouldQueue, ShouldBeUnique
                     'created_at' => now(),
                     'updated_at' => now()
                 ]);
+                
+                $created++;
             } else {
 
                 if (
@@ -203,6 +225,8 @@ class SyncNseFolders implements ShouldQueue, ShouldBeUnique
                         'nse_modified_at' => $apiDate,
                         'updated_at' => now()
                     ]);
+                    
+                    $updated++;
                 }
             }
         }
@@ -229,6 +253,10 @@ class SyncNseFolders implements ShouldQueue, ShouldBeUnique
                 'folder' => $parent,
                 'count' => count($toDelete)
             ]);
+            
+            $deleted += count($toDelete);
         }
+
+        return ['created' => $created, 'updated' => $updated, 'deleted' => $deleted];
     }
 }
