@@ -162,7 +162,7 @@ class NSECommanController extends Controller
             $updated = $result['updated'] ?? 0;
             $deleted = $result['deleted'] ?? 0;
 
-            $hasChanges = ($created + $deleted) > 0;
+            $hasChanges = ($created + $updated + $deleted) > 0;
 
             \Log::info("Sync COMPLETED", [
                 'segment' => $segment,

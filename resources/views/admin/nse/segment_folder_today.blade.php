@@ -253,7 +253,7 @@ $path = '';
                 </tbody>
             </table>
 
-            <div class="p-4">
+            <div id="paginationContainer" class="p-4">
                 {{ $contents->appends(request()->query())->links() }}
             </div>
         </div>
@@ -336,6 +336,10 @@ $path = '';
                 if (badge) badge.style.display = 'none';
 
                 if (data.status === 'ok') {
+                    if (data.hasChanges) {
+                        silentTableReload();
+                    }
+
                     // Show green done badge, auto-hide after 4s
                     if (doneBadge) {
                         doneBadge.style.display = 'inline-flex';
@@ -348,6 +352,37 @@ $path = '';
             .catch(() => {
                 if (badge) badge.style.display = 'none';
             });
+    }
+
+    // ─── Silent Table Refresh (No Page Reload) ──────────────────────────────────
+    function silentTableReload() {
+        fetch(window.location.href, {
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(res => res.text())
+        .then(html => {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+            
+            // Swap tbody
+            const newTbody = doc.querySelector('tbody');
+            const currentTbody = document.querySelector('tbody');
+            if (newTbody && currentTbody) {
+                currentTbody.innerHTML = newTbody.innerHTML;
+            }
+
+            // Swap pagination
+            const newPagination = doc.getElementById('paginationContainer');
+            const currentPagination = document.getElementById('paginationContainer');
+            if (newPagination && currentPagination) {
+                currentPagination.innerHTML = newPagination.innerHTML;
+            }
+            
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+        })
+        .catch(err => console.error("Silent reload failed", err));
     }
 
     // ─── Manual Sync Now Button ───────────────────────────────────────────────
@@ -381,10 +416,7 @@ $path = '';
                             icon: 'success',
                             title: data.message || 'Changes detected. Updating...'
                         });
-                        sessionStorage.setItem('sync_reloaded', '1');
-                        setTimeout(() => {
-                            window.location.reload();
-                        }, 600);
+                        silentTableReload();
                     }
                 } else if (data.status === 'in_progress') {
                     Toast.fire({

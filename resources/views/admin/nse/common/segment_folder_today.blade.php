@@ -222,7 +222,7 @@ $folder = trim($folder ?? '', '/');
                 </tbody>
             </table>
 
-            <div class="p-4">
+            <div id="paginationContainer" class="p-4">
                 {{ $contents->appends(request()->query())->links() }}
             </div>
         </div>
@@ -250,11 +250,7 @@ $folder = trim($folder ?? '', '/');
 
     function triggerBackgroundSync() {
 
-        // ✅ prevent multiple reload loops
-        if (sessionStorage.getItem('sync_reloaded') === '1') {
-            sessionStorage.removeItem('sync_reloaded');
-            return;
-        }
+
 
         fetch("{{ route('nse.common.sync.background', ['segment' => $segment]) }}", {
                 method: 'POST',
@@ -269,28 +265,55 @@ $folder = trim($folder ?? '', '/');
             .then(res => res.json())
             .then(data => {
 
-                // ✅ reload ONLY once when changes exist
-                if (data.status === 'ok' && data.hasChanges) {
-
-                    const badge = document.getElementById('syncStatusBadge');
-
-                    if (badge) {
-                        badge.innerText = "Updating...";
-                        badge.style.display = 'inline';
+                // ✅ refresh ONLY when changes exist
+                if (data.status === 'ok') {
+                    if (data.hasChanges) {
+                        silentTableReload();
                     }
-
-                    // ✅ mark before reload
-                    sessionStorage.setItem('sync_reloaded', '1');
-
-                    setTimeout(() => {
-                        window.location.reload();
-                    }, 500);
+                    
+                    const badge = document.getElementById('syncStatusBadge');
+                    if (badge) {
+                        badge.innerText = "Updated";
+                        badge.style.display = 'inline';
+                        setTimeout(() => { badge.style.display = 'none'; }, 4000);
+                    }
                 }
 
             })
             .catch(err => {
                 console.error("Sync error:", err);
             });
+    }
+
+    // ─── Silent Table Refresh (No Page Reload) ──────────────────────────────────
+    function silentTableReload() {
+        fetch(window.location.href, {
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(res => res.text())
+        .then(html => {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+            
+            // Swap tbody
+            const newTbody = doc.querySelector('tbody');
+            const currentTbody = document.querySelector('tbody');
+            if (newTbody && currentTbody) {
+                currentTbody.innerHTML = newTbody.innerHTML;
+            }
+
+            // Swap pagination
+            const newPagination = doc.getElementById('paginationContainer');
+            const currentPagination = document.getElementById('paginationContainer');
+            if (newPagination && currentPagination) {
+                currentPagination.innerHTML = newPagination.innerHTML;
+            }
+            
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+        })
+        .catch(err => console.error("Silent reload failed", err));
     }
 
     function triggerDownload(btn, id) {
@@ -387,19 +410,11 @@ $folder = trim($folder ?? '', '/');
 
                     // ✅ ONLY reload if changes exist
                     if (data.hasChanges) {
-
                         Toast.fire({
                             icon: 'success',
                             title: data.message || 'Changes detected. Updating...'
                         });
-
-                        // ✅ prevent reload loop
-                        sessionStorage.setItem('sync_reloaded', '1');
-
-                        setTimeout(() => {
-                            window.location.reload();
-                        }, 600);
-
+                        silentTableReload();
                     } else {
                         // ✅ no UI noise (as per your requirement)
                         // do nothing

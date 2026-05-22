@@ -77,7 +77,7 @@
     </div>
 
     {{-- Scrollable Body --}}
-    <div class="flex-1 overflow-y-auto divide-y divide-gray-100 shadow-sm bg-white mx-4">
+    <div id="archiveListContainer" class="flex-1 overflow-y-auto divide-y divide-gray-100 shadow-sm bg-white mx-4">
 
         @forelse($treeByDate as $date => $tree)
         @php
@@ -333,10 +333,7 @@
                                 icon: 'success',
                                 title: data.message || 'Changes detected. Updating...'
                             });
-                            sessionStorage.setItem('sync_reloaded', '1');
-                            setTimeout(() => {
-                                window.location.reload();
-                            }, 600);
+                            silentArchiveReload();
                         } else {
                             Toast.fire({
                                 icon: 'info',
@@ -364,6 +361,30 @@
                         title: 'Something went wrong.'
                     });
                 });
+        }
+
+        // ─── Silent Archive Refresh (No Page Reload) ─────────────────────────────
+        function silentArchiveReload() {
+            fetch(window.location.href, {
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(res => res.text())
+            .then(html => {
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                
+                const newContainer = doc.getElementById('archiveListContainer');
+                const currentContainer = document.getElementById('archiveListContainer');
+                
+                if (newContainer && currentContainer) {
+                    currentContainer.innerHTML = newContainer.innerHTML;
+                }
+                
+                if (typeof lucide !== 'undefined') lucide.createIcons();
+            })
+            .catch(err => console.error("Silent reload failed", err));
         }
     </script>
     @endsection

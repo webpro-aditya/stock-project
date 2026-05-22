@@ -208,7 +208,7 @@ class NSEController extends Controller
             $updated = $result['updated'] ?? 0;
             $deleted = $result['deleted'] ?? 0;
 
-            $hasChanges = ($created + $deleted) > 0;
+            $hasChanges = ($created + $updated + $deleted) > 0;
 
             // ✅ Bust cache by incrementing the cache version
             $versionKey = $this->buildVersionKey($segment, $parent);

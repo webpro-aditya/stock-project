@@ -26,7 +26,7 @@
     </div>
 
     {{-- Scrollable Body --}}
-    <div class="flex-1 overflow-y-auto divide-y divide-gray-100">
+    <div id="archiveListContainer" class="flex-1 overflow-y-auto divide-y divide-gray-100">
 
         @forelse($treeByDate as $date => $tree)
             @php
@@ -217,6 +217,91 @@ function downloadSelected() {
     .catch(error => {
         Toast.fire({ icon: 'error', title: error.message });
     });
+}
+
+// ─── Manual Sync Now Button ───────────────────────────────────────────────
+function syncNow(segment) {
+    const btn = document.querySelector('.btn-sync');
+    const originalHtml = btn.innerHTML;
+
+    btn.disabled = true;
+    btn.innerHTML = '<i data-lucide="loader-circle" class="w-4 h-4 animate-spin"></i> SYNCING...';
+    lucide.createIcons();
+
+    fetch("{{ route('nse.common.sync.background', ['segment' => ':seg']) }}".replace(':seg', segment), {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+            },
+            body: JSON.stringify({
+                folder: 'root'
+            })
+        })
+        .then(res => res.json())
+        .then(data => {
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
+            lucide.createIcons();
+
+            if (data.status === 'ok') {
+                if (data.hasChanges) {
+                    Toast.fire({
+                        icon: 'success',
+                        title: data.message || 'Changes detected. Updating...'
+                    });
+                    silentArchiveReload();
+                } else {
+                    Toast.fire({
+                        icon: 'info',
+                        title: 'Already up to date'
+                    });
+                }
+            } else if (data.status === 'in_progress') {
+                Toast.fire({
+                    icon: 'info',
+                    title: 'Sync already in progress.'
+                });
+            } else {
+                Toast.fire({
+                    icon: 'error',
+                    title: 'Sync failed. Please retry.'
+                });
+            }
+        })
+        .catch(() => {
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
+            lucide.createIcons();
+            Toast.fire({
+                icon: 'error',
+                title: 'Something went wrong.'
+            });
+        });
+}
+
+// ─── Silent Archive Refresh (No Page Reload) ─────────────────────────────
+function silentArchiveReload() {
+    fetch(window.location.href, {
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(res => res.text())
+    .then(html => {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+        
+        const newContainer = doc.getElementById('archiveListContainer');
+        const currentContainer = document.getElementById('archiveListContainer');
+        
+        if (newContainer && currentContainer) {
+            currentContainer.innerHTML = newContainer.innerHTML;
+        }
+        
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+    })
+    .catch(err => console.error("Silent reload failed", err));
 }
 </script>
 @endsection

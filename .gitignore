@@ -18,3 +18,16 @@ yarn-error.log
 /.idea
 /.vscode
 /project_template.sql
+.rr.yaml
+csv_test.php
+frankenphp
+gz_test.php
+profiler.php
+public/frankenphp-worker.php
+rr
+test.csv
+test.csv.tmp1
+test.csv.tmp2
+test.gz
+test_out1.txt
+test_out2.txt
