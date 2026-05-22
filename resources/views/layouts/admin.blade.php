@@ -11,12 +11,13 @@
         @yield('page_title') |
         @endif {{ __('Admin Dashboard') }}
     </title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&family=Poppins&display=swap" rel="stylesheet">
+
     <link href="{{ asset('css/styles.css?v1') }}" rel="stylesheet" />
-    <link rel="preconnect" href='https://fonts.googleapis.com/css?family=Poppins' rel='stylesheet'>
     <script src="{{ asset('js/font-awesome.js') }}" defer crossorigin="anonymous"></script>
-    {{--<link href="{{ asset('css/bootstrap.min.css') }}" rel="stylesheet"
-        integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">--}}
-    <!-- Font Awesome Icons -->
     <link rel="stylesheet" href="{{ asset('css/sweetalert2.min.css') }}">
     <script src="{{ asset('js/tailwind.js') }}"></script>
     <link rel="stylesheet" href="{{ asset('css/jquery.dataTables.min.css') }}" media="print" onload="this.media='all'">
@@ -214,7 +215,6 @@
         }
     </style>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap');
 
         body {
             font-family: 'Inter', sans-serif;
@@ -437,7 +437,7 @@
                 }, 100);
             }
 
-            showPreloader();
+            // Removed unconditional showPreloader() to avoid layout flashes
 
             // In master blade — replace the DataTable init block with this:
             if ($('#activityTable').length) {
