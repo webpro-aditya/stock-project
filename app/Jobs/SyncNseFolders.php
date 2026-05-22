@@ -173,7 +173,7 @@ class SyncNseFolders implements ShouldQueue, ShouldBeUnique
 
         $apiNames = [];
 
-        $upserts = [];
+        $inserts = [];
 
         foreach ($apiResponse['data'] as $item) {
 
@@ -201,7 +201,7 @@ class SyncNseFolders implements ShouldQueue, ShouldBeUnique
 
             if (!$existing) {
 
-                $upserts[] = [
+                $inserts[] = [
                     'segment' => $segment,
                     'parent_folder' => $parent,
                     'name' => $name,
@@ -222,18 +222,11 @@ class SyncNseFolders implements ShouldQueue, ShouldBeUnique
                     $existing->nse_modified_at &&
                     $apiDate->gt($existing->nse_modified_at)
                 ) {
-                    $upserts[] = [
-                        'segment' => $segment,
-                        'parent_folder' => $parent,
-                        'name' => $name,
-                        'type' => $type,
-                        'path' => $fullPath,
+                    $existing->update([
                         'size' => $item['size'] ?? 0,
-                        'nse_created_at' => $existing->nse_created_at, // Preserve original creation date
                         'nse_modified_at' => $apiDate,
-                        'created_at' => clone $existing->created_at, // Preserve original
                         'updated_at' => now()
-                    ];
+                    ]);
                     
                     $updated++;
                 }
@@ -242,16 +235,12 @@ class SyncNseFolders implements ShouldQueue, ShouldBeUnique
 
         /*
         |--------------------------------------------------------------------------
-        | Bulk Execute Upserts
+        | Bulk Execute Inserts
         |--------------------------------------------------------------------------
         */
-        if (!empty($upserts)) {
-            foreach (array_chunk($upserts, 500) as $chunk) {
-                NseContent::upsert(
-                    $chunk,
-                    ['segment', 'parent_folder', 'name'], 
-                    ['size', 'nse_modified_at', 'updated_at']
-                );
+        if (!empty($inserts)) {
+            foreach (array_chunk($inserts, 500) as $chunk) {
+                NseContent::insert($chunk);
             }
         }
 
