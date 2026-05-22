@@ -135,12 +135,40 @@ $folder = trim($folder ?? '', '/');
 
     <div class="bg-white rounded-lg shadow-lg">
 
-        <div class="px-6 py-3 border-b flex justify-between">
+        <div class="px-6 py-3 border-b flex items-center justify-between flex-wrap gap-2">
+            
+            {{-- Left: Title --}}
             <div class="flex items-center gap-3 text-lg font-bold text-gray-900">
                 <i data-lucide="sun" class="w-6 h-6 text-amber-500"></i>
                 All Activity
             </div>
-            <div id="syncStatusBadge" style="display:none;">Syncing...</div>
+
+            {{-- Right: Syncing badge --}}
+            <div id="syncStatusBadge"
+                style="display:none;"
+                class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-indigo-200 bg-indigo-50">
+                {{-- Ping dot --}}
+                <span class="relative flex h-2 w-2 shrink-0">
+                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+                    <span class="relative inline-flex h-2 w-2 rounded-full bg-indigo-500"></span>
+                </span>
+                <span class="text-xs font-semibold text-indigo-600 whitespace-nowrap">Syncing</span>
+                {{-- Animated dots --}}
+                <span class="flex gap-0.5 items-center" id="syncDots">
+                    <span class="w-1 h-1 rounded-full bg-indigo-400 animate-bounce" style="animation-delay:0ms"></span>
+                    <span class="w-1 h-1 rounded-full bg-indigo-400 animate-bounce" style="animation-delay:150ms"></span>
+                    <span class="w-1 h-1 rounded-full bg-indigo-400 animate-bounce" style="animation-delay:300ms"></span>
+                </span>
+            </div>
+
+            {{-- Right: Done badge --}}
+            <div id="syncDoneBadge"
+                style="display:none;"
+                class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-green-200 bg-green-50">
+                <span class="relative inline-flex h-2 w-2 shrink-0 rounded-full bg-green-500"></span>
+                <span class="text-xs font-semibold text-green-600 whitespace-nowrap">Updated just now</span>
+            </div>
+            
         </div>
 
         {{-- Search --}}
@@ -249,8 +277,12 @@ $folder = trim($folder ?? '', '/');
     });
 
     function triggerBackgroundSync() {
+        const badge = document.getElementById('syncStatusBadge');
+        const doneBadge = document.getElementById('syncDoneBadge');
 
-
+        // Show syncing badge
+        if (badge) badge.style.display = 'inline-flex';
+        if (doneBadge) doneBadge.style.display = 'none';
 
         fetch("{{ route('nse.common.sync.background', ['segment' => $segment]) }}", {
                 method: 'POST',
@@ -265,23 +297,28 @@ $folder = trim($folder ?? '', '/');
             .then(res => res.json())
             .then(data => {
 
+                // Hide syncing badge
+                if (badge) badge.style.display = 'none';
+
                 // ✅ refresh ONLY when changes exist
                 if (data.status === 'ok') {
                     if (data.hasChanges) {
                         silentTableReload();
                     }
                     
-                    const badge = document.getElementById('syncStatusBadge');
-                    if (badge) {
-                        badge.innerText = "Updated";
-                        badge.style.display = 'inline';
-                        setTimeout(() => { badge.style.display = 'none'; }, 4000);
+                    // Show green done badge, auto-hide after 4s
+                    if (doneBadge) {
+                        doneBadge.style.display = 'inline-flex';
+                        setTimeout(() => {
+                            doneBadge.style.display = 'none';
+                        }, 4000);
                     }
                 }
 
             })
             .catch(err => {
                 console.error("Sync error:", err);
+                if (badge) badge.style.display = 'none';
             });
     }
 
@@ -309,6 +346,13 @@ $folder = trim($folder ?? '', '/');
             const currentPagination = document.getElementById('paginationContainer');
             if (newPagination && currentPagination) {
                 currentPagination.innerHTML = newPagination.innerHTML;
+            }
+            
+            // Swap last synced text (badge)
+            const newDoneBadge = doc.getElementById('syncDoneBadge');
+            const currentDoneBadge = document.getElementById('syncDoneBadge');
+            if (newDoneBadge && currentDoneBadge) {
+                currentDoneBadge.innerHTML = newDoneBadge.innerHTML;
             }
             
             if (typeof lucide !== 'undefined') lucide.createIcons();
