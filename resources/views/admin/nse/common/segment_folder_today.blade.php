@@ -172,23 +172,34 @@ $folder = trim($folder ?? '', '/');
         </div>
 
         {{-- Search --}}
-        <form method="GET" class="p-4 flex gap-3">
-            <input type="hidden" name="folder" value="{{ request('folder') }}">
+        <div class="px-6 py-4 bg-white border-b border-gray-100 flex items-center justify-between">
+            <form method="GET" class="flex items-center gap-3 w-full max-w-lg relative">
+                <input type="hidden" name="folder" value="{{ request('folder') }}">
+                
+                <div class="relative flex-1">
+                    <div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                        <i data-lucide="search" class="w-4 h-4 text-gray-400"></i>
+                    </div>
+                    <input type="text"
+                        name="search"
+                        value="{{ request('search') }}"
+                        placeholder="Search folders or files..."
+                        class="w-full pl-10 pr-4 py-2 text-sm text-gray-900 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-brand focus:border-brand transition-all outline-none">
+                </div>
 
-            <input type="text"
-                name="search"
-                value="{{ request('search') }}"
-                placeholder="Search..."
-                class="border px-3 py-2 rounded">
+                <button class="flex items-center gap-2 px-5 py-2 text-sm font-medium text-white bg-brand rounded-lg hover:bg-brand-hover shadow-sm transition-all focus:ring-2 focus:ring-offset-1 focus:ring-brand">
+                    Search
+                </button>
 
-            <button class="bg-brand text-white px-4 py-2 rounded">
-                Search
-            </button>
-
-            @if(request('search'))
-            <a href="{{ request()->url() }}?folder={{ request('folder') }}">Clear</a>
-            @endif
-        </form>
+                @if(request('search'))
+                <a href="{{ request()->url() }}?folder={{ request('folder') }}"
+                   class="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 hover:text-red-600 transition-all focus:ring-2 focus:ring-offset-1 focus:ring-red-500">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                    Clear
+                </a>
+                @endif
+            </form>
+        </div>
 
         <div class="overflow-x-auto">
             <table class="w-full text-sm">
