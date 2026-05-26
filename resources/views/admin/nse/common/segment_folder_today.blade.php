@@ -386,7 +386,11 @@ $folder = trim($folder ?? '', '/');
                 }
             })
             .then(response => {
-                if (!response.ok) throw new Error();
+                if (!response.ok) {
+                    return response.json().then(err => {
+                        throw new Error(err.message || 'Server error occurred.');
+                    });
+                }
                 return response.json();
             })
             .then(data => {
@@ -398,13 +402,13 @@ $folder = trim($folder ?? '', '/');
                     btn.innerHTML = `<i data-lucide="check-circle" class="w-5 h-5 text-success"></i>&nbsp;Downloaded`;
                     lucide.createIcons();
                     window.location.href = data.url;
-                } else throw new Error();
+                } else throw new Error(data.message || 'Download failed.');
             })
-            .catch(() => {
+            .catch((error) => {
                 Toast.fire({
                     icon: 'error',
                     title: 'Download Failed.',
-                    text: 'Please retry after some time.',
+                    text: error.message || 'Please retry after some time.',
                     timer: 5000
                 });
                 btn.innerHTML = `<i data-lucide="x" class="w-4 h-4 mr-2"></i>`;
@@ -526,16 +530,18 @@ $folder = trim($folder ?? '', '/');
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
                 },
                 body: JSON.stringify({
                     ids: selectedIds
                 })
             })
             .then(response => {
-                if (!response.ok) return response.json().then(err => {
-                    throw new Error(err.message);
-                });
+                if (!response.ok) {
+                    return response.json().then(err => {
+                        throw new Error(err.message || 'Server error occurred.');
+                    });
+                }
                 return response.json();
             })
             .then(data => {
@@ -551,13 +557,13 @@ $folder = trim($folder ?? '', '/');
                         lucide.createIcons();
                         clearSelection();
                     }, 2000);
-                } else throw new Error();
+                } else throw new Error(data.message || 'Bulk download failed.');
             })
-            .catch(() => {
+            .catch((error) => {
                 Toast.fire({
                     icon: 'error',
                     title: 'Download Failed',
-                    text: 'Please retry after some time.',
+                    text: error.message || 'Please retry after some time.',
                     timer: 5000
                 });
                 btn.disabled = false;

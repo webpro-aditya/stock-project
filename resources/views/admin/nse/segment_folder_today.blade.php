@@ -470,7 +470,11 @@ $path = '';
                 }
             })
             .then(response => {
-                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                if (!response.ok) {
+                    return response.json().then(err => {
+                        throw new Error(err.message || 'Server error occurred.');
+                    });
+                }
                 return response.json();
             })
             .then(data => {
@@ -483,7 +487,7 @@ $path = '';
                     lucide.createIcons();
                     window.location.href = data.url;
                 } else {
-                    throw new Error('Download failed.');
+                    throw new Error(data.message || 'Download failed.');
                 }
             })
             .catch(error => {
@@ -491,7 +495,7 @@ $path = '';
                 Toast.fire({
                     icon: 'error',
                     title: 'Download Failed',
-                    text: 'Please retry after some time.',
+                    text: error.message || 'Please retry after some time.',
                     timer: 5000,
                     timerProgressBar: true,
                     showConfirmButton: false
@@ -595,7 +599,7 @@ $path = '';
                     }, 2000);
 
                 } else {
-                    throw new Error('Download failed.');
+                    throw new Error(data.message || 'Bulk download failed.');
                 }
             })
             .catch(error => {
@@ -603,7 +607,7 @@ $path = '';
                 Toast.fire({
                     icon: 'error',
                     title: 'Download Failed',
-                    text: 'Please retry after some time.',
+                    text: error.message,
                     timer: 5000,
                     timerProgressBar: true,
                     showConfirmButton: false
