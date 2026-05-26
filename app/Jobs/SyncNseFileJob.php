@@ -31,6 +31,9 @@ class SyncNseFileJob
 
     public function handle(NSEService $nseService)
     {
+        // ✅ Prevent PHP max_execution_time from killing downloads on production
+        set_time_limit(0);
+
         $fileRecord = NseContent::findOrFail($this->fileId);
 
         /*
@@ -134,6 +137,14 @@ class SyncNseFileJob
             throw new \Exception("Missing auth token for NSE API download.");
         }
 
+        Log::info("Member download starting", [
+            'file'      => $fileRecord->name,
+            'segment'   => $fileRecord->segment,
+            'folder'    => $folderParam,
+            'savePath'  => $absolutePath,
+            'source'    => $this->source,
+        ]);
+
         $finalPath = $nseService->downloadFileFromApi(
             $this->authToken,
             $fileRecord->segment,
@@ -143,7 +154,7 @@ class SyncNseFileJob
         );
 
         if (!$finalPath) {
-            throw new \Exception("Failed to download file from NSE API: {$fileRecord->name}");
+            throw new \Exception("Failed to download file from NSE API: {$fileRecord->name} (segment: {$fileRecord->segment}, folder: {$folderParam}, savePath: {$absolutePath})");
         }
 
         /*

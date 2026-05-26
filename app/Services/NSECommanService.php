@@ -251,7 +251,12 @@ class NSECommanService
             fclose($fp);
 
             if ($err || $httpCode >= 500 || $httpCode === 429) {
-                Log::warning("NSE Comman API Download Attempt $attempt Failed for $fileName: " . ($err ?: "HTTP $httpCode"));
+                Log::warning("NSE Comman API Download Attempt $attempt Failed for $fileName", [
+                    'error'       => $err ?: "HTTP $httpCode",
+                    'httpCode'    => $httpCode,
+                    'contentType' => $contentType,
+                    'fileSize'    => file_exists($savePath) ? filesize($savePath) : 0,
+                ]);
                 if ($attempt < $maxRetries) {
                     if (file_exists($savePath)) unlink($savePath);
                     sleep(2 * $attempt);
@@ -281,10 +286,25 @@ class NSECommanService
         }
 
         if ($httpCode >= 200 && $httpCode < 300 && file_exists($savePath) && filesize($savePath) > 0) {
+            Log::info("NSE Common download raw file saved", [
+                'fileName'    => $fileName,
+                'httpCode'    => $httpCode,
+                'contentType' => $contentType,
+                'fileSize'    => filesize($savePath),
+                'savePath'    => $savePath,
+            ]);
+
             $processingPath = $savePath;
 
             if (str_ends_with($processingPath, '.gz')) {
                 $processingPath = $this->decompressGzFile($processingPath);
+
+                Log::info("NSE Common decompression result", [
+                    'originalPath' => $savePath,
+                    'resultPath'   => $processingPath,
+                    'resultExists' => file_exists($processingPath),
+                    'resultSize'   => file_exists($processingPath) ? filesize($processingPath) : 0,
+                ]);
             }
 
             $extension = strtolower(pathinfo($processingPath, PATHINFO_EXTENSION));
@@ -295,8 +315,14 @@ class NSECommanService
             return $processingPath;
         }
 
+        $failedSize = file_exists($savePath) ? filesize($savePath) : 0;
         if (file_exists($savePath)) unlink($savePath);
-        Log::error("NSE Common Download Failed [HTTP $httpCode]");
+        Log::error("NSE Common Download Failed", [
+            'fileName'    => $fileName,
+            'httpCode'    => $httpCode,
+            'contentType' => $contentType,
+            'fileSize'    => $failedSize,
+        ]);
         saveSyncLog('common', $segment, $httpCode, '', "NSE Common Download Failed [HTTP $httpCode]");
         return false;
     }

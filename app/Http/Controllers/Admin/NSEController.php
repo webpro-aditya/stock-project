@@ -529,6 +529,9 @@ class NSEController extends Controller
         // Release session lock early to prevent blocking concurrent requests
         session()->save();
 
+        // ✅ Prevent PHP max_execution_time from killing large file downloads on prod
+        set_time_limit(0);
+
         try {
             $source     = $request->query('source', 'today');
             $fileRecord = NseContent::findOrFail($id);

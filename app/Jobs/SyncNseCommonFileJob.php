@@ -32,6 +32,9 @@ class SyncNseCommonFileJob
 
     public function handle(NSECommanService $nseService)
     {
+        // ✅ Prevent PHP max_execution_time from killing downloads on production
+        set_time_limit(0);
+
         $fileRecord = NseCommanContent::findOrFail($this->fileId);
 
         /*
@@ -97,7 +100,7 @@ class SyncNseCommonFileJob
             );
 
             if (!$finalPath) {
-                throw new \Exception("Failed to download archive common file: {$fileRecord->name}");
+                throw new \Exception("Failed to download archive common file: {$fileRecord->name} (segment: {$fileRecord->segment}, folder: {$folderParam})");
             }
 
             Log::info("Common archive download complete: $finalPath");
@@ -135,6 +138,14 @@ class SyncNseCommonFileJob
             throw new \Exception("Missing auth token for NSE Common API download.");
         }
 
+        Log::info("Common download starting", [
+            'file'      => $fileRecord->name,
+            'segment'   => $fileRecord->segment,
+            'folder'    => $folderParam,
+            'savePath'  => $absolutePath,
+            'source'    => $this->source,
+        ]);
+
         $finalPath = $nseService->downloadFileFromApi(
             $this->authToken,
             $fileRecord->segment,
@@ -144,7 +155,7 @@ class SyncNseCommonFileJob
         );
 
         if (!$finalPath) {
-            throw new \Exception("Failed to download common file from NSE API: {$fileRecord->name}");
+            throw new \Exception("Failed to download common file from NSE API: {$fileRecord->name} (segment: {$fileRecord->segment}, folder: {$folderParam}, savePath: {$absolutePath})");
         }
 
         /*
