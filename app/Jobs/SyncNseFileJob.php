@@ -51,8 +51,16 @@ class SyncNseFileJob
             $relativePath = "nse/{$dateFolder}/{$fileRecord->segment}/{$fileRecord->parent_folder}/{$fileRecord->name}";
         }
 
-        $absolutePath      = Storage::path($relativePath);
-        $fileExistsLocally = Storage::exists($relativePath);
+        // ✅ Download path must include .gz
+        $absolutePath = Storage::path($relativePath);
+
+        // ✅ Check if the FINAL (decompressed) file exists, matching the controller's expectation
+        $finalExpectedPath = str_ends_with($relativePath, '.gz')
+            ? substr($relativePath, 0, -3)
+            : $relativePath;
+
+        $fileExistsLocally = Storage::exists($finalExpectedPath);
+        $finalAbsolutePath = Storage::path($finalExpectedPath);
 
         /*
         |--------------------------------------------------------------------------
@@ -114,7 +122,7 @@ class SyncNseFileJob
         $shouldDownload = true;
 
         if ($fileExistsLocally) {
-            $localModified = Carbon::createFromTimestamp(filemtime($absolutePath));
+            $localModified = Carbon::createFromTimestamp(filemtime($finalAbsolutePath));
 
             if (
                 $fileRecord->nse_modified_at &&
