@@ -148,19 +148,22 @@ function triggerDownload(btn, id) {
     btn.innerHTML = '<i class="animate-spin" data-lucide="loader-2"></i>';
     lucide.createIcons();
 
-    const url = "{{ route('nse.file.prepare', ['id' => ':id']) }}".replace(':id', id);
+    const url = "{{ route('nse.common.file.prepare', ['id' => ':id']) }}".replace(':id', id);
 
     fetch(url)
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) return response.json().then(err => { throw new Error(err.message || 'Download failed'); });
+            return response.json();
+        })
         .then(data => {
             if (data.success) {
                 window.location.href = data.url;
             } else {
-                throw new Error(data.message);
+                throw new Error(data.message || 'Download failed');
             }
         })
         .catch(error => {
-            Toast.fire({ icon: 'error', title: error.message });
+            Toast.fire({ icon: 'error', title: error.message || 'Download failed. Please retry.' });
         })
         .finally(() => {
             btn.disabled = false;
@@ -198,7 +201,7 @@ function downloadSelected() {
         return;
     }
 
-    fetch("{{ route('nse.member.download.bulk.prepare') }}", {
+    fetch("{{ route('nse.common.download.bulk.prepare') }}", {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -206,16 +209,19 @@ function downloadSelected() {
         },
         body: JSON.stringify({ ids: selectedIds })
     })
-    .then(response => response.json())
+    .then(response => {
+        if (!response.ok) return response.json().then(err => { throw new Error(err.message || 'Download failed'); });
+        return response.json();
+    })
     .then(data => {
         if (data.success) {
             window.location.href = data.url;
         } else {
-            throw new Error(data.message);
+            throw new Error(data.message || 'Download failed');
         }
     })
     .catch(error => {
-        Toast.fire({ icon: 'error', title: error.message });
+        Toast.fire({ icon: 'error', title: error.message || 'Download failed. Please retry.' });
     });
 }
 

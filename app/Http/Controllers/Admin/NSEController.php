@@ -541,45 +541,74 @@ class NSEController extends Controller
                 ], 401);
             }
 
+            // ✅ Pre-compute the expected storage path for verification after download
+            $folderSegment = (!empty($fileRecord->parent_folder) && strtolower($fileRecord->parent_folder) !== 'root')
+                ? $fileRecord->parent_folder . '/'
+                : '';
+
+            // ✅ Resolve actual stored filename (.gz → decompressed)
+            $storedName = str_ends_with($fileRecord->name, '.gz')
+                ? substr($fileRecord->name, 0, -3)
+                : $fileRecord->name;
+
             if ($source === 'archive') {
                 $archiveDate = $request->query('date');
+                $dateFolder  = $archiveDate;
 
-                // ✅ Build correct path (no 'root' folder in path)
-                $folderSegment = (!empty($fileRecord->parent_folder) && strtolower($fileRecord->parent_folder) !== 'root')
-                    ? $fileRecord->parent_folder . '/'
-                    : '';
+                $relativePath = 'nse/' . $dateFolder . '/' .
+                    $fileRecord->segment . '/' .
+                    $folderSegment .
+                    $storedName;
 
-                $storagePath = storage_path(
-                    'app/nse/' . $archiveDate . '/' .
-                        $fileRecord->segment . '/' .
-                        $folderSegment .
-                        $fileRecord->name
-                );
-
-                if (!file_exists($storagePath)) {
+                if (!Storage::exists($relativePath)) {
                     SyncNseFileJob::dispatchSync($id, $authToken, 'archive', $archiveDate);
+                }
+
+                // ✅ Verify file actually exists after download attempt
+                if (!Storage::exists($relativePath)) {
+                    Log::error("prepareDownload: Archive file still missing after sync: $relativePath");
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'File download from NSE failed. Please retry.'
+                    ], 500);
                 }
 
                 return response()->json([
                     'success' => true,
                     'url' => route('nse.file.serve', [
                         'id'          => $id,
-                        'archiveDate' => $archiveDate  // ✅ pass date as query param
+                        'archiveDate' => $archiveDate
                     ])
                 ]);
             }
 
             // TODAY MODE
+            $dateFolder   = Carbon::parse($fileRecord->created_at)->format('Y-m-d');
+            $relativePath = 'nse/' . $dateFolder . '/' .
+                $fileRecord->segment . '/' .
+                $folderSegment .
+                $storedName;
+
             SyncNseFileJob::dispatchSync($id, $authToken, 'today');
+
+            // ✅ Verify file actually exists after download attempt
+            if (!Storage::exists($relativePath)) {
+                Log::error("prepareDownload: File still missing after sync: $relativePath");
+                return response()->json([
+                    'success' => false,
+                    'message' => 'File download from NSE failed. Please retry.'
+                ], 500);
+            }
 
             return response()->json([
                 'success' => true,
                 'url' => route('nse.file.serve', ['id' => $id])
             ]);
         } catch (\Exception $e) {
+            Log::error("prepareDownload failed for ID $id: " . $e->getMessage());
             return response()->json([
                 'success' => false,
-                'message' => $e->getMessage()
+                'message' => 'File download failed: ' . $e->getMessage()
             ], 500);
         }
     }
@@ -612,7 +641,17 @@ class NSEController extends Controller
 
         if (!Storage::exists($relativePath)) {
             Log::error("serveFile: File not found at: $relativePath");
-            abort(404, 'File not found.');
+
+            // ✅ Return JSON error for AJAX requests instead of rendering 404 page
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'File not found on server.'
+                ], 404);
+            }
+
+            // ✅ For browser navigation (window.location.href), redirect back with error
+            return redirect()->back()->with('error', 'File not found. The download may have failed — please retry.');
         }
 
         // ✅ Serve with correct filename (no .gz extension)

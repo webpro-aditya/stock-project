@@ -222,7 +222,10 @@
             fetch(url, {
                     method: 'GET'
                 })
-                .then(response => response.json())
+                .then(response => {
+                    if (!response.ok) return response.json().then(err => { throw new Error(err.message || 'Download failed'); });
+                    return response.json();
+                })
                 .then(data => {
                     if (data.success) {
                         window.location.href = data.url+'?archiveDate='+archiveDate;
@@ -286,7 +289,10 @@
                         ids: selectedIds
                     })
                 })
-                .then(response => response.json())
+                .then(response => {
+                    if (!response.ok) return response.json().then(err => { throw new Error(err.message || 'Download failed'); });
+                    return response.json();
+                })
                 .then(data => {
                     if (data.success) {
                         window.location.href = data.url;

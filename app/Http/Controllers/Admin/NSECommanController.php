@@ -376,8 +376,37 @@ class NSECommanController extends Controller
 
             $source      = $request->query('source', 'today');
             $archiveDate = $request->query('date');
+            $fileRecord  = NseCommanContent::findOrFail($id);
+
+            // ✅ Pre-compute the expected storage path for verification after download
+            $folderSegment = (!empty($fileRecord->parent_folder) && strtolower($fileRecord->parent_folder) !== 'root')
+                ? $fileRecord->parent_folder . '/'
+                : '';
+
+            // ✅ Resolve actual stored filename (.gz → decompressed)
+            $storedName = str_ends_with($fileRecord->name, '.gz')
+                ? substr($fileRecord->name, 0, -3)
+                : $fileRecord->name;
+
+            $dateFolder = ($source === 'archive' && $archiveDate)
+                ? $archiveDate
+                : Carbon::parse($fileRecord->created_at)->format('Y-m-d');
+
+            $relativePath = 'common/' . $dateFolder . '/' .
+                $fileRecord->segment . '/' .
+                $folderSegment .
+                $storedName;
 
             SyncNseCommonFileJob::dispatchSync($id, $authToken, $source, $archiveDate);
+
+            // ✅ Verify file actually exists after download attempt
+            if (!Storage::exists($relativePath)) {
+                Log::error("prepareDownload [common]: File still missing after sync: $relativePath");
+                return response()->json([
+                    'success' => false,
+                    'message' => 'File download from NSE failed. Please retry.'
+                ], 500);
+            }
 
             $routeParams = ['id' => $id];
 
@@ -391,9 +420,10 @@ class NSECommanController extends Controller
                 'url'     => route('nse.common.file.serve', $routeParams)
             ]);
         } catch (\Exception $e) {
+            Log::error("prepareDownload [common] failed for ID $id: " . $e->getMessage());
             return response()->json([
                 'success' => false,
-                'message' => $e->getMessage()
+                'message' => 'File download failed: ' . $e->getMessage()
             ], 500);
         }
     }
@@ -425,7 +455,17 @@ class NSECommanController extends Controller
 
         if (!Storage::exists($relativePath)) {
             Log::error("serveFile [common]: File not found at: $relativePath");
-            abort(404, 'File not found.');
+
+            // ✅ Return JSON error for AJAX requests instead of rendering 404 page
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'File not found on server.'
+                ], 404);
+            }
+
+            // ✅ For browser navigation (window.location.href), redirect back with error
+            return redirect()->back()->with('error', 'File not found. The download may have failed — please retry.');
         }
 
         // ✅ Serve with correct filename (no .gz)
