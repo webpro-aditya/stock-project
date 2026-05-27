@@ -236,7 +236,17 @@ class NSECommanService
         while ($attempt < $maxRetries && !$success) {
             $attempt++;
 
-            $fp   = fopen($savePath, 'wb+');
+            $fp = fopen($savePath, 'wb+');
+
+            if (!$fp) {
+                Log::error("NSE Common download: fopen() failed", [
+                    'savePath'    => $savePath,
+                    'dirExists'   => is_dir(dirname($savePath)),
+                    'dirWritable' => is_writable(dirname($savePath)),
+                ]);
+                return false;
+            }
+
             $curlOpts[CURLOPT_FILE] = $fp;
             
             $curl = curl_init();

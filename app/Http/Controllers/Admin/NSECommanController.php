@@ -367,14 +367,17 @@ class NSECommanController extends Controller
         // ✅ Prevent PHP max_execution_time from killing large file downloads on prod
         set_time_limit(0);
 
-        try {
-            $authToken = $this->nseCommanService->getAuthToken();
+        // ✅ Prevent concurrent downloads of the same file from corrupting each other
+        $lockKey = "download_common_file_{$id}";
+        $lock = Cache::lock($lockKey, 120); // 2-minute max lock
 
-            if (!$authToken) {
+        try {
+            // Wait up to 90 seconds for an existing download to complete
+            if (!$lock->block(90)) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Authentication failed.'
-                ], 401);
+                    'message' => 'Another download for this file is in progress. Please wait.'
+                ], 429);
             }
 
             $source      = $request->query('source', 'today');
@@ -400,7 +403,19 @@ class NSECommanController extends Controller
                 $folderSegment .
                 $storedName;
 
-            SyncNseCommonFileJob::dispatchSync($id, $authToken, $source, $archiveDate);
+            // ✅ Skip download if file already exists (another request may have just completed it)
+            if (!Storage::exists($relativePath)) {
+                $authToken = $this->nseCommanService->getAuthToken();
+
+                if (!$authToken) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Authentication failed.'
+                    ], 401);
+                }
+
+                SyncNseCommonFileJob::dispatchSync($id, $authToken, $source, $archiveDate);
+            }
 
             // ✅ Verify file actually exists after download attempt
             if (!Storage::exists($relativePath)) {
@@ -428,6 +443,8 @@ class NSECommanController extends Controller
                 'success' => false,
                 'message' => 'File download failed: ' . $e->getMessage()
             ], 500);
+        } finally {
+            optional($lock)->release();
         }
     }
 

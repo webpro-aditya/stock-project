@@ -532,17 +532,21 @@ class NSEController extends Controller
         // ✅ Prevent PHP max_execution_time from killing large file downloads on prod
         set_time_limit(0);
 
-        try {
-            $source     = $request->query('source', 'today');
-            $fileRecord = NseContent::findOrFail($id);
-            $authToken  = $this->nseService->getAuthToken();
+        // ✅ Prevent concurrent downloads of the same file from corrupting each other
+        $lockKey = "download_member_file_{$id}";
+        $lock = Cache::lock($lockKey, 120); // 2-minute max lock
 
-            if (!$authToken) {
+        try {
+            // Wait up to 90 seconds for an existing download to complete
+            if (!$lock->block(90)) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Authentication failed.'
-                ], 401);
+                    'message' => 'Another download for this file is in progress. Please wait.'
+                ], 429);
             }
+
+            $source     = $request->query('source', 'today');
+            $fileRecord = NseContent::findOrFail($id);
 
             // ✅ Pre-compute the expected storage path for verification after download
             $folderSegment = (!empty($fileRecord->parent_folder) && strtolower($fileRecord->parent_folder) !== 'root')
@@ -563,7 +567,17 @@ class NSEController extends Controller
                     $folderSegment .
                     $storedName;
 
+                // ✅ Skip download if file already exists (another request may have just completed it)
                 if (!Storage::exists($relativePath)) {
+                    $authToken = $this->nseService->getAuthToken();
+
+                    if (!$authToken) {
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Authentication failed.'
+                        ], 401);
+                    }
+
                     SyncNseFileJob::dispatchSync($id, $authToken, 'archive', $archiveDate);
                 }
 
@@ -592,7 +606,19 @@ class NSEController extends Controller
                 $folderSegment .
                 $storedName;
 
-            SyncNseFileJob::dispatchSync($id, $authToken, 'today');
+            // ✅ Skip download if file already exists (another request may have just completed it)
+            if (!Storage::exists($relativePath)) {
+                $authToken = $this->nseService->getAuthToken();
+
+                if (!$authToken) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Authentication failed.'
+                    ], 401);
+                }
+
+                SyncNseFileJob::dispatchSync($id, $authToken, 'today');
+            }
 
             // ✅ Verify file actually exists after download attempt
             if (!Storage::exists($relativePath)) {
@@ -613,6 +639,8 @@ class NSEController extends Controller
                 'success' => false,
                 'message' => 'File download failed: ' . $e->getMessage()
             ], 500);
+        } finally {
+            optional($lock)->release();
         }
     }
 

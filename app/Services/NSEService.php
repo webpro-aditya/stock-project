@@ -197,6 +197,14 @@ class NSEService
 
         $url = "{$creds['base_url']}/member/file/download/{$creds['version']}?{$queryParams}";
 
+        Log::info("NSE Member download request", [
+            'url'      => $url,
+            'fileName' => $fileName,
+            'segment'  => $segment,
+            'folder'   => $folder,
+            'savePath' => $savePath,
+        ]);
+
         $cookieString = 'HttpOnly';
         if (isset($creds['cookie_abck'])) $cookieString .= '; _abck=' . $creds['cookie_abck'];
         if (isset($creds['cookie_bm_sz'])) $cookieString .= '; bm_sz=' . $creds['cookie_bm_sz'];
@@ -238,7 +246,17 @@ class NSEService
         while ($attempt < $maxRetries && !$success) {
             $attempt++;
 
-            $fp   = fopen($savePath, 'wb+');  // ✅ binary mode
+            $fp = fopen($savePath, 'wb+');  // ✅ binary mode
+
+            if (!$fp) {
+                Log::error("NSE Member download: fopen() failed", [
+                    'savePath'  => $savePath,
+                    'dirExists' => is_dir(dirname($savePath)),
+                    'dirWritable' => is_writable(dirname($savePath)),
+                ]);
+                return false;
+            }
+
             $curlOpts[CURLOPT_FILE] = $fp;
             
             $curl = curl_init();
@@ -254,7 +272,12 @@ class NSEService
 
             // Handle temporary network failures or server errors (5xx, 429 Too Many Requests)
             if ($err || $httpCode >= 500 || $httpCode === 429) {
-                Log::warning("NSE API Download Attempt $attempt Failed for $fileName: " . ($err ?: "HTTP $httpCode"));
+                Log::warning("NSE Member API Download Attempt $attempt Failed for $fileName", [
+                    'error'       => $err ?: "HTTP $httpCode",
+                    'httpCode'    => $httpCode,
+                    'contentType' => $contentType,
+                    'fileSize'    => file_exists($savePath) ? filesize($savePath) : 0,
+                ]);
                 if ($attempt < $maxRetries) {
                     if (file_exists($savePath)) unlink($savePath);
                     sleep(2 * $attempt); // Exponential backoff (2s, 4s...)
@@ -265,7 +288,11 @@ class NSEService
         }
 
         if ($err) {
-            Log::error("NSE cURL Error: " . $err);
+            Log::error("NSE Member cURL Error", [
+                'error'    => $err,
+                'fileName' => $fileName,
+                'url'      => $url,
+            ]);
             saveSyncLog('member', $segment, '400', '', 'NSE cURL Error: ' . $err);
             if (file_exists($savePath)) unlink($savePath);
             return false;
@@ -279,16 +306,37 @@ class NSEService
 
         // ✅ Guard against HTML error pages being saved as files
         if (!empty($contentType) && str_contains($contentType, 'text/html')) {
-            Log::error("NSE returned HTML error page [HTTP $httpCode]");
+            $htmlSnippet = file_exists($savePath) ? substr(file_get_contents($savePath), 0, 500) : '';
+            Log::error("NSE Member returned HTML error page", [
+                'httpCode'    => $httpCode,
+                'contentType' => $contentType,
+                'fileName'    => $fileName,
+                'htmlSnippet' => $htmlSnippet,
+            ]);
             if (file_exists($savePath)) unlink($savePath);
             return false;
         }
 
         if ($httpCode >= 200 && $httpCode < 300 && file_exists($savePath) && filesize($savePath) > 0) {
+            Log::info("NSE Member download raw file saved", [
+                'fileName'    => $fileName,
+                'httpCode'    => $httpCode,
+                'contentType' => $contentType,
+                'fileSize'    => filesize($savePath),
+                'savePath'    => $savePath,
+            ]);
+
             $processingPath = $savePath;
 
             if (str_ends_with($processingPath, '.gz')) {
                 $processingPath = $this->decompressGzFile($processingPath);
+
+                Log::info("NSE Member decompression result", [
+                    'originalPath' => $savePath,
+                    'resultPath'   => $processingPath,
+                    'resultExists' => file_exists($processingPath),
+                    'resultSize'   => file_exists($processingPath) ? filesize($processingPath) : 0,
+                ]);
             }
 
             $extension = strtolower(pathinfo($processingPath, PATHINFO_EXTENSION));
@@ -299,8 +347,15 @@ class NSEService
             return $processingPath;  // ✅ return final path, not just true
         }
 
+        $failedSize = file_exists($savePath) ? filesize($savePath) : 0;
         if (file_exists($savePath)) unlink($savePath);
-        Log::error("NSE Download Failed [HTTP $httpCode]");
+        Log::error("NSE Member Download Failed", [
+            'fileName'    => $fileName,
+            'httpCode'    => $httpCode,
+            'contentType' => $contentType,
+            'fileSize'    => $failedSize,
+            'url'         => $url,
+        ]);
         saveSyncLog('member', $segment, $httpCode, '', "NSE Download Failed [HTTP $httpCode]");
         return false;
     }
